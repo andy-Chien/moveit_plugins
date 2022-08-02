@@ -1,0 +1,6 @@
+<library path="libmoveit_pointcloud_octomap_updater_fast">
+  <class name="occupancy_map_monitor/PointCloudOctomapUpdaterFast" type="occupancy_map_monitor::PointCloudOctomapUpdaterFast" base_class_type="occupancy_map_monitor::OccupancyMapUpdater">
+    <description>
+    </description>
+  </class>
+</library>

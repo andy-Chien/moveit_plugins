@@ -1,0 +1,14 @@
+include_directories(
+  SYSTEM
+  adapt_prm/include
+  ompl_interface/include
+  objectives/include
+)
+
+add_subdirectory(adapt_prm)
+add_subdirectory(ompl_interface)
+add_subdirectory(objectives)
+
+install(FILES ompl_interface_plugin_description.xml
+  DESTINATION ${CATKIN_PACKAGE_SHARE_DESTINATION})
+

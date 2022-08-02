@@ -1,0 +1,33 @@
+# AdaptPRM: success rate: 0.7906976744186046, avg planning time: 0.05129784498235295, avg traj length: 1.0280344134401855
+# LazyPRM:  success rate: 0.8046511627906977, avg planning time: 0.04830028750867052, avg traj length: 1.0196434479189993
+# LazyPRM:  success rate: 0.8046511627906977, avg planning time: 0.0511721571358382, avg traj length: 1.013707106737494
+# AdaptPRM: success rate: 0.7827906976744186, avg planning time: 0.04637359954783119, avg traj length: 1.014661637520853s
+# BiTRRT:   success rate: 0.8046511627906977, avg planning time: 0.058620869769942165, avg traj length: 1.0419016998631074
+
+# BiTRRT:   success rate: 0.7023255813953488, avg planning time: 0.06759875439668861, avg traj length: 1.4535358460068615
+# LazyPRM:  success rate: 0.701721731037692, avg planning time: 0.0795470531458886, avg traj length: 1.6082371859024374
+# AdaptPRM: success rate: 0.66, avg planning time: 0.0582751211733616, avg traj length: 1.5091753020552294
+
+# LazyPRM:  success rate: 0.5441860465116279, avg planning time: 0.051223053454700865, avg traj length: 1.5270657496523963
+# BiTRRT:   success rate: 0.5441860465116279, avg planning time: 0.07512143067777767, avg traj length: 1.4050844966723215
+
+# AdaptPRM: success rate: 0.7669767441860466, avg planning time: 0.051386757953911406, avg traj length: 1.18734379901375
+    # 2500: success rate: 0.7730232558139535, avg planning time: 0.05236855282551126, avg traj length: 1.1613705188044385
+    # $1750: success rate: 0.7837209302325582, avg planning time: 0.04463353388783389, avg traj length: 1.108920371992451
+    # 1250:  success rate: 0.7790697674418605, avg planning time: 0.04894515638447763, avg traj length: 1.1763459554932252
+
+# LazyPRM:  success rate: 0.8046511627906977, avg planning time: 0.046053331221965296, avg traj length: 1.4513320835769634
+# BiTRRT:   success rate: 0.805025593299209, avg planning time: 0.06841519838381492, avg traj length: 1.3182255291129155
+
+
+# AdaptPRM:    success rate: 0.704, planning time: 0.0514, traj length: 1.1109
+# LazyPRM:     success rate: 0.7136, planning time: 0.0469, traj length: 1.3852
+# LazyPRM(MQ): success rate: 0.7149, planning time: 0.0582, traj length: 1.0959
+# BiTRRT:      success rate: 0.7132, planning time: 0.0739, traj length: 1.2751
+# PRM:         success rate: 0.7177, planning time: 0.0756, traj length: 1.712
+
+# AdaptPRM:    success rate: 0.6977, planning time: 0.0728, traj length: 1.0731
+# LazyPRM(MQ): success rate: 0.7103, planning time: 0.0961, traj length: 1.1161
+# BiTRRT:      success rate: 0.7123, planning time: 0.0848, traj length: 1.1309
+# PRM:         success rate: 0.7118, planning time: 0.0802, traj length: 1.3678
+# LazyPRM:     success rate: 0.7113, planning time: 0.0731, traj length: 1.2162

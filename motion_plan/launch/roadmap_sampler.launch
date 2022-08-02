@@ -1,0 +1,34 @@
+<launch>
+    <arg name="output" default="screen"/>
+    <arg name="robot_name" default=""/>
+    <arg name="run" default="false"/>
+    <arg name="tj_storage" default="tj_test"/>
+    <arg name="tj_load" default="tj_test"/>
+    <arg name="allowed_execute" default="false"/>
+    <arg name="continuous_mode" default="false"/>
+
+    <!-- with namespce -->
+    <group ns="$(arg robot_name)" unless="$(eval arg('robot_name')=='')">
+        <node pkg="motion_plan" name="roadmap_sampler" type="roadmap_sampler_node.py" output="$(arg output)">
+            <param name="run" value="$(arg run)"/>
+            <param name="robot_name" value="$(arg robot_name)"/>
+            <param name="cfg_file"   value="$(find motion_plan)/cfg/roadmap_sampler.yaml"/>
+            <param name="tj_storage" value="$(find motion_plan)/cfg/planned_trajectory/$(arg tj_storage)"/>
+            <param name="tj_load" value="$(find motion_plan)/cfg/planned_trajectory/$(arg tj_load)"/>
+            <param name="allowed_execute" value="$(arg allowed_execute)"/>
+            <param name="continuous_mode" value="$(arg continuous_mode)"/>
+        </node>
+    </group>
+    <!-- without namespce -->
+    <group if="$(eval arg('robot_name')=='')">
+        <node pkg="motion_plan" name="roadmap_sampler" type="roadmap_sampler_node.py" output="$(arg output)">
+            <param name="run" value="$(arg run)"/>
+            <param name="robot_name" value="$(arg robot_name)"/>
+            <param name="cfg_file"   value="$(find motion_plan)/cfg/roadmap_sampler.yaml"/>
+            <param name="tj_storage" value="$(find motion_plan)/cfg/planned_trajectory/$(arg tj_storage)"/>
+            <param name="tj_load" value="$(find motion_plan)/cfg/planned_trajectory/$(arg tj_load)"/>
+            <param name="allowed_execute" value="$(arg allowed_execute)"/>
+            <param name="continuous_mode" value="$(arg continuous_mode)"/>
+        </node>
+    </group>
+</launch>

@@ -1,0 +1,90 @@
+sampler_config:
+    init_joints: [90.1, -90.1, 90.1, -90.1, -90.1, -90.1]
+    euler_rule: 'rxyz'
+    start:
+        flat:
+            points:
+                -   [0.3, 0.5, -0.15] # x, y, z
+                -   [0.32, 0.5, -0.15] # in meters
+                -   [0.3, 0.52, -0.15]
+            voxel_size: [0.02, 0.02]
+            border_size: [0.03, 0.03]
+        rotation:
+            center: [179.9, -0.1, 90.1] # rx, ry, rz, in degree
+            range: [0, 0.0, 0.0]  # +- rx, ry, rz
+            step_size: [0, 0.0, 0] # in degree, also used to check limit in trajectory loader
+            border_size: [15, 15, 180]
+    target:
+        flat:
+            points:
+                -   [-0.3, 0.5, -0.15] # x, y, z
+                -   [-0.32, 0.5, -0.15] # in meters
+                -   [-0.3, 0.52, -0.15]
+            voxel_size: [0.02, 0.02]
+            border_size: [0.03, 0.03]
+        rotation:
+            center: [179.1, -0.1, 90.1]
+            range: [0.0, 0, 0.0]
+            step_size: [0.0, 0, 0]
+            border_size: [15, 15, 180]
+
+# sampler_config:
+#     init_joints: [90.1, -90.1, 90.1, -90.1, -90.1, -90.1]
+#     euler_rule: 'rxyz'
+#     start:
+#         flat:
+#             points:
+#                 -   [0.05, 0.25, -0.15] # x, y, z
+#                 -   [0.37, 0.25, -0.15] # in meters
+#                 -   [0.0, 0.77, -0.15]
+#             voxel_size: [0.08, 0.1]
+#             border_size: [0.03, 0.03]
+#         rotation:
+#             center: [179.9, -0.1, 90.1] # rx, ry, rz, in degree
+#             range: [30, 30.0, 0.0]  # +- rx, ry, rz
+#             step_size: [30, 30.0, 0] # in degree, also used to check limit in trajectory loader
+#             border_size: [15, 15, 180]
+#     target:
+#         flat:
+#             points:
+#                 -   [-0.37, 0.25, -0.15] # x, y, z
+#                 -   [-0.05, 0.25, -0.15] # in meters
+#                 -   [-0.37, 0.77, -0.15]
+#             voxel_size: [0.08, 0.1]
+#             border_size: [0.03, 0.03]
+#         rotation:
+#             center: [179.1, -0.1, 90.1]
+#             range: [30.0, 30, 0.0]
+#             step_size: [30.0, 30, 0]
+#             border_size: [15, 15, 180]
+
+
+# sampler_config:
+#     init_joints: [-12.42,-96.67,-98.03,-75.69,89.68,63.59]
+#     euler_rule: 'rxyz'
+#     start:
+#         flat:
+#             points:
+#                 -   [0.4826, -0.2192, 0.0388] # x, y, z
+#                 -   [0.4795, 0.1989, 0.0395] # in meters
+#                 -   [0.4826, -0.2192, 0.0388]
+#             voxel_size: [0.4182, 0,0]
+#             border_size: [0.1, 0.1]
+#         rotation:
+#             center: [179.9, -0.1, 166] # rx, ry, rz, in degree
+#             range: [0.0, 0.0, 0.0]  # +- rx, ry, rz
+#             step_size: [30, 30, 90] # in degree, also used to check limit in trajectory loader
+#             border_size: [30, 30, 180]
+#     target:
+#         flat:
+#             points:
+#                 -   [0.3, -0.4, -0.14] # x, y, z
+#                 -   [0.3, 0.38, -0.14] # in meters
+#                 -   [0.87, -0.4, -0.14]
+#             voxel_size: [0.05, 0.05]
+#             border_size: [0.05, 0.05]
+#         rotation:
+#             center: [0.1, 179.9, 0.1]
+#             range: [30, 30, 179.9]
+#             step_size: [30, 30, 60]
+#             border_size: [30, 30, 180]
