@@ -86,9 +86,15 @@ namespace ompl
 
             bool isAcceptable(const Cost cost) const;
 
+            void setEnableExploration(bool enable);
+
+            bool getEnableExploration();
+
+
         private:
             float distance_weight_{0.9};
             float max_cost_{2};
+            bool enable_exploration_{true};
         };
     }
 }

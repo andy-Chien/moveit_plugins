@@ -87,6 +87,16 @@ void ompl::base::PathLengthUtilizationOptimizationObjective::setMaxCost(double m
     this->max_cost_ = max_cost;
 }
 
+void ompl::base::PathLengthUtilizationOptimizationObjective::setEnableExploration(bool enable)
+{
+    this->enable_exploration_ = enable;
+}
+
+bool ompl::base::PathLengthUtilizationOptimizationObjective::getEnableExploration()
+{
+    return this->enable_exploration_;
+}
+
 bool ompl::base::PathLengthUtilizationOptimizationObjective::isAcceptable(const Cost cost) const
 {
     return cost.value() < this->max_cost_;

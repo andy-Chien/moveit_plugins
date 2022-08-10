@@ -327,6 +327,8 @@ namespace ompl
 
             bool isAcceptable(ompl::base::Cost cost);
 
+            void explorationCondition();
+
             /** \brief Flag indicating whether the default connection strategy is the Star strategy */
             bool starStrategy_;
 

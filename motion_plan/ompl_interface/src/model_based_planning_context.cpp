@@ -357,6 +357,11 @@ void ompl_interface::ModelBasedPlanningContext::useConfig()
     std::static_pointer_cast<ompl::base::PathLengthUtilizationOptimizationObjective>(objective)
       ->setDistanceWeight(moveit::core::toDouble(it->second));
 
+  it = cfg.find("enable_exploration");
+  if (it != cfg.end() && optimizer == "PathLengthUtilizationOptimizationObjective")
+    std::static_pointer_cast<ompl::base::PathLengthUtilizationOptimizationObjective>(objective)
+      ->setEnableExploration(boost::lexical_cast<bool>(it->second));
+
   // Don't clear planner data if multi-query planning is enabled
   it = cfg.find("multi_query_planning_enabled");
   if (it != cfg.end())

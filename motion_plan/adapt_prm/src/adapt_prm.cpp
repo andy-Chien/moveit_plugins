@@ -411,6 +411,7 @@ ompl::base::PlannerStatus ompl::geometric::AdaptPRM::solve(const base::PlannerTe
     unsigned long int nrStartStates = boost::num_vertices(g_);
     OMPL_INFORM("%s: Starting planning with %lu states already in datastructure", getName().c_str(), nrStartStates);
 
+    explorationCondition();
     bestCost_ = opt_->infiniteCost();
     base::State *workState = si_->allocState();
     std::pair<std::size_t, std::size_t> startGoalPair;
@@ -474,7 +475,7 @@ ompl::base::PlannerStatus ompl::geometric::AdaptPRM::solve(const base::PlannerTe
                 min_c = opt_->motionCostHeuristic(stateProperty_[startV], stateProperty_[goalV]); //costHeuristic(startV, goalV);
                 c = base::Cost(solution->cost(opt_).value() / (min_c.value() + 0.0001));
                 
-                if (opt_->isSatisfied(c))
+                if (opt_->isSatisfied(c) || !enableExploration_)
                 {
                     fullyOptimized = true;
                     bestSolution = solution;
@@ -502,13 +503,15 @@ ompl::base::PlannerStatus ompl::geometric::AdaptPRM::solve(const base::PlannerTe
         pdef_->addSolutionPath(psol);
     }
     removeTerminalPair(startGoalPair);
-    if (int(++solvedCount_) % int(magic::VERTEX_CLEARING_TIMING) == 0 || boost::num_vertices(g_) > magic::MAX_VERTICES)
+    if (enableExploration_)
     {
-        bool regular = int(solvedCount_) % int(magic::VERTEX_CLEARING_TIMING) == 0;
-        simplifyGrapgThread_ = new std::thread(&ompl::geometric::AdaptPRM::simplifyGragh, this, regular);
-        simplifyGrapgThread_->detach();
+        if (int(++solvedCount_) % int(magic::VERTEX_CLEARING_TIMING) == 0 || boost::num_vertices(g_) > magic::MAX_VERTICES)
+        {
+            bool regular = int(solvedCount_) % int(magic::VERTEX_CLEARING_TIMING) == 0;
+            simplifyGrapgThread_ = new std::thread(&ompl::geometric::AdaptPRM::simplifyGragh, this, regular);
+            simplifyGrapgThread_->detach();
+        }
     }
-
     OMPL_INFORM("%s: Graph has %u states, best cost is %.3f", getName().c_str(), boost::num_vertices(g_), bestCost_.value());
     return bestSolution && this->isAcceptable(bestCost_)? base::PlannerStatus::EXACT_SOLUTION : base::PlannerStatus::TIMEOUT;
 }
@@ -866,6 +869,13 @@ ompl::base::Cost ompl::geometric::AdaptPRM::costHeuristic(Vertex u, Vertex v) co
         return ompl::base::Cost(c);
     }
 }
+
+void ompl::geometric::AdaptPRM::explorationCondition()
+{
+    enableExploration_ = std::static_pointer_cast<base::PathLengthUtilizationOptimizationObjective>
+        (opt_)->getEnableExploration();
+}
+
 #else
 void ompl::geometric::AdaptPRM::createDefaultOpt()
 {
@@ -889,6 +899,11 @@ ompl::base::Cost ompl::geometric::AdaptPRM::costHeuristic(Vertex u, Vertex v) co
 
     c += opt_->motionCostHeuristic(stateProperty_[u], stateProperty_[v]).value();
     return ompl::base::Cost(c);
+}
+
+void ompl::geometric::AdaptPRM::explorationCondition()
+{
+   return;
 }
 #endif
 
