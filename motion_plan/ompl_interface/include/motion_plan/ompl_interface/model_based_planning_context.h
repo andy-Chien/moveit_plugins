@@ -294,7 +294,7 @@ public:
      @param timeout The time to spend on solving
      @param count The number of runs to combine the paths of, in an attempt to generate better quality paths
   */
-  const moveit_msgs::msg::MoveItErrorCodes solve(double timeout, unsigned int count);
+  bool solve(double timeout, unsigned int count);
 
   /* @brief Benchmark the planning problem. Return true on successful saving of benchmark results
      @param timeout The time to spend on solving
@@ -387,9 +387,6 @@ protected:
 
   void registerTerminationCondition(const ob::PlannerTerminationCondition& ptc);
   void unregisterTerminationCondition();
-
-  /** \brief Convert OMPL PlannerStatus to moveit_msgs::msg::MoveItErrorCode */
-  int32_t logPlannerStatus(og::SimpleSetupPtr ompl_simple_setup);
 
   ModelBasedPlanningContextSpecification spec_;
 

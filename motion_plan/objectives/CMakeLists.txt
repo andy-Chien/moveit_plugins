@@ -7,3 +7,7 @@ target_link_libraries(${PROJECT_NAME}_objectives
   ${OMPL_LIBRARIES}
 )
 
+install(TARGETS ${PROJECT_NAME}_objectives
+  RUNTIME DESTINATION lib/${PROJECT_NAME}_objectives
+)
+install(DIRECTORY include/ DESTINATION include)

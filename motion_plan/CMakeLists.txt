@@ -10,14 +10,10 @@ if(CMAKE_CXX_COMPILER_ID MATCHES "(GNU|Clang)")
 endif()
 
 set(THIS_PACKAGE_INCLUDE_DEPENDS
-  actionlib
-  actionlib_msgs
   moveit_core
   moveit_ros_planning
   moveit_ros_planning_interface
   rclcpp
-  rosconsole
-  roslib
   std_msgs
   tf2
   tf2_eigen

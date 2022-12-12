@@ -43,7 +43,7 @@ ament_target_dependencies(${MOVEIT_LIB_NAME}
   Boost
 )
 
-target_link_libraries(${MOVEIT_LIB_NAME} ${PROJECT_NAME}_planner ${PROJECT_NAME}_objectives ${OMPL_LIBRARIES} ${catkin_LIBRARIES} ${Boost_LIBRARIES})
+# target_link_libraries(${MOVEIT_LIB_NAME} ${PROJECT_NAME}_planner ${PROJECT_NAME}_objectives ${OMPL_LIBRARIES} ${catkin_LIBRARIES} ${Boost_LIBRARIES})
 set_target_properties(${MOVEIT_LIB_NAME} PROPERTIES COMPILE_FLAGS "${CMAKE_CXX_FLAGS} ${OpenMP_CXX_FLAGS}")
 set_target_properties(${MOVEIT_LIB_NAME} PROPERTIES LINK_FLAGS "${OpenMP_CXX_FLAGS}")
 
@@ -52,9 +52,8 @@ target_link_libraries(moveit_generate_state_database ${MOVEIT_LIB_NAME})
 set_target_properties(moveit_generate_state_database PROPERTIES LINK_FLAGS "${OpenMP_CXX_FLAGS}")
 set_target_properties(moveit_generate_state_database PROPERTIES OUTPUT_NAME "generate_state_database")
 
-add_library(moveit_ompl_planner_plugin src/ompl_planner_manager.cpp)
+add_library(moveit_ompl_planner_plugin SHARED src/ompl_planner_manager.cpp)
 set_target_properties(moveit_ompl_planner_plugin PROPERTIES VERSION "${${PROJECT_NAME}_VERSION}")
-target_link_libraries(moveit_ompl_planner_plugin ${PROJECT_NAME}_planner ${MOVEIT_LIB_NAME} ${catkin_LIBRARIES} ${Boost_LIBRARIES})
 ament_target_dependencies(moveit_ompl_planner_plugin
   moveit_core
   moveit_ros_planning
@@ -64,6 +63,7 @@ ament_target_dependencies(moveit_ompl_planner_plugin
   OMPL
   Boost
 )
+target_link_libraries(moveit_ompl_planner_plugin ${MOVEIT_LIB_NAME} )
 
 # install(TARGETS ${MOVEIT_LIB_NAME} moveit_ompl_planner_plugin
 #   LIBRARY DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
