@@ -46,8 +46,8 @@
 #include <moveit/utils/robot_model_test_utils.h>
 #include <gtest/gtest.h>
 #include <fstream>
-#include <boost/filesystem/path.hpp>
-#include <ros/package.h>
+
+static const rclcpp::Logger LOGGER = rclcpp::get_logger("moveit.ompl_planning.test.test_state_space");
 
 constexpr double EPSILON = std::numeric_limits<double>::epsilon();
 
@@ -83,7 +83,7 @@ TEST_F(LoadPlanningModelsPr2, StateSpace)
   }
   catch (ompl::Exception& ex)
   {
-    ROS_ERROR("Sanity checks did not pass: %s", ex.what());
+    RCLCPP_ERROR(LOGGER, "Sanity checks did not pass: %s", ex.what());
   }
   EXPECT_TRUE(passed);
 }
@@ -126,7 +126,7 @@ TEST_F(LoadPlanningModelsPr2, StateSpaceCopy)
   }
   catch (ompl::Exception& ex)
   {
-    ROS_ERROR("Sanity checks did not pass: %s", ex.what());
+    RCLCPP_ERROR(LOGGER, "Sanity checks did not pass: %s", ex.what());
   }
   EXPECT_TRUE(passed);
 
@@ -143,12 +143,12 @@ TEST_F(LoadPlanningModelsPr2, StateSpaceCopy)
         robot_state.getRobotModel()->getJointModelGroup(joint_model_state_space.getJointModelGroupName()));
     std::cout << (robot_state.getGlobalLinkTransform("r_wrist_roll_link").translation() -
                   robot_state2.getGlobalLinkTransform("r_wrist_roll_link").translation())
-              << std::endl;
+              << '\n';
     EXPECT_TRUE(robot_state.distance(robot_state2) > EPSILON);
     joint_model_state_space.copyToRobotState(robot_state, state);
     std::cout << (robot_state.getGlobalLinkTransform("r_wrist_roll_link").translation() -
                   robot_state2.getGlobalLinkTransform("r_wrist_roll_link").translation())
-              << std::endl;
+              << '\n';
     EXPECT_TRUE(robot_state.distance(robot_state2) < EPSILON);
   }
 
@@ -182,6 +182,34 @@ TEST_F(LoadPlanningModelsPr2, StateSpaceCopy)
   }
 
   joint_model_state_space.freeState(state);
+}
+
+// Run the OMPL sanity checks on the diff drive model
+TEST(TestDiffDrive, TestStateSpace)
+{
+  moveit::core::RobotModelBuilder builder("mobile_base", "base_link");
+  builder.addVirtualJoint("odom_combined", "base_link", "planar", "base_joint");
+  builder.addJointProperty("base_joint", "motion_model", "diff_drive");
+  builder.addGroup({}, { "base_joint" }, "base");
+  ASSERT_TRUE(builder.isValid());
+
+  auto robot_model = builder.build();
+  ompl_interface::ModelBasedStateSpaceSpecification spec(robot_model, "base");
+  ompl_interface::JointModelStateSpace ss(spec);
+  ss.setPlanningVolume(-2, 2, -2, 2, -2, 2);
+  ss.setup();
+
+  bool passed = false;
+  try
+  {
+    ss.sanityChecks();
+    passed = true;
+  }
+  catch (ompl::Exception& ex)
+  {
+    RCLCPP_ERROR(LOGGER, "Sanity checks did not pass: %s", ex.what());
+  }
+  EXPECT_TRUE(passed);
 }
 
 int main(int argc, char** argv)

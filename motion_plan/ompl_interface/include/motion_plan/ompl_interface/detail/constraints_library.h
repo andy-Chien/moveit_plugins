@@ -36,6 +36,7 @@
 
 #pragma once
 
+#include <map>
 #include <moveit/macros/class_forward.h>
 #include <moveit/ompl_interface/model_based_planning_context.h>
 #include <moveit/kinematic_constraints/kinematic_constraint.h>
@@ -54,7 +55,7 @@ class ConstraintApproximation
 {
 public:
   ConstraintApproximation(std::string group, std::string state_space_parameterization, bool explicit_motions,
-                          moveit_msgs::Constraints msg, std::string filename, ompl::base::StateStoragePtr storage,
+                          moveit_msgs::msg::Constraints msg, std::string filename, ompl::base::StateStoragePtr storage,
                           std::size_t milestones = 0);
 
   virtual ~ConstraintApproximation()
@@ -66,7 +67,7 @@ public:
     return constraint_msg_.name;
   }
 
-  ompl::base::StateSamplerAllocator getStateSamplerAllocator(const moveit_msgs::Constraints& msg) const;
+  ompl::base::StateSamplerAllocator getStateSamplerAllocator(const moveit_msgs::msg::Constraints& msg) const;
 
   InterpolationFunction getInterpolationFunction() const;
 
@@ -95,7 +96,7 @@ public:
     return state_space_parameterization_;
   }
 
-  const moveit_msgs::Constraints& getConstraintsMsg() const
+  const moveit_msgs::msg::Constraints& getConstraintsMsg() const
   {
     return constraint_msg_;
   }
@@ -115,7 +116,7 @@ protected:
   std::string state_space_parameterization_;
   bool explicit_motions_;
 
-  moveit_msgs::Constraints constraint_msg_;
+  moveit_msgs::msg::Constraints constraint_msg_;
 
   std::vector<int> space_signature_;
 
@@ -169,13 +170,13 @@ public:
   void saveConstraintApproximations(const std::string& path);
 
   ConstraintApproximationConstructionResults
-  addConstraintApproximation(const moveit_msgs::Constraints& constr_sampling,
-                             const moveit_msgs::Constraints& constr_hard, const std::string& group,
+  addConstraintApproximation(const moveit_msgs::msg::Constraints& constr_sampling,
+                             const moveit_msgs::msg::Constraints& constr_hard, const std::string& group,
                              const planning_scene::PlanningSceneConstPtr& scene,
                              const ConstraintApproximationConstructionOptions& options);
 
   ConstraintApproximationConstructionResults
-  addConstraintApproximation(const moveit_msgs::Constraints& constr, const std::string& group,
+  addConstraintApproximation(const moveit_msgs::msg::Constraints& constr, const std::string& group,
                              const planning_scene::PlanningSceneConstPtr& scene,
                              const ConstraintApproximationConstructionOptions& options);
 
@@ -187,14 +188,14 @@ public:
     constraint_approximations_[approx->getName()] = approx;
   }
 
-  const ConstraintApproximationPtr& getConstraintApproximation(const moveit_msgs::Constraints& msg) const;
+  const ConstraintApproximationPtr& getConstraintApproximation(const moveit_msgs::msg::Constraints& msg) const;
 
 private:
-  ompl::base::StateStoragePtr
-  constructConstraintApproximation(ModelBasedPlanningContext* pcontext, const moveit_msgs::Constraints& constr_sampling,
-                                   const moveit_msgs::Constraints& constr_hard,
-                                   const ConstraintApproximationConstructionOptions& options,
-                                   ConstraintApproximationConstructionResults& result);
+  ompl::base::StateStoragePtr constructConstraintApproximation(ModelBasedPlanningContext* pcontext,
+                                                               const moveit_msgs::msg::Constraints& constr_sampling,
+                                                               const moveit_msgs::msg::Constraints& constr_hard,
+                                                               const ConstraintApproximationConstructionOptions& options,
+                                                               ConstraintApproximationConstructionResults& result);
 
   ModelBasedPlanningContext* context_;
   std::map<std::string, ConstraintApproximationPtr> constraint_approximations_;

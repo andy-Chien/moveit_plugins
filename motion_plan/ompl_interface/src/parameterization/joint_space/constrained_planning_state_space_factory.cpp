@@ -1,7 +1,7 @@
 /*********************************************************************
  * Software License Agreement (BSD License)
  *
- *  Copyright (c) 2012, Willow Garage, Inc.
+ *  Copyright (c) 2020, KU Leuven
  *  All rights reserved.
  *
  *  Redistribution and use in source and binary forms, with or without
@@ -14,7 +14,7 @@
  *     copyright notice, this list of conditions and the following
  *     disclaimer in the documentation and/or other materials provided
  *     with the distribution.
- *   * Neither the name of Willow Garage nor the names of its
+ *   * Neither the name of KU Leuven nor the names of its
  *     contributors may be used to endorse or promote products derived
  *     from this software without specific prior written permission.
  *
@@ -32,23 +32,32 @@
  *  POSSIBILITY OF SUCH DAMAGE.
  *********************************************************************/
 
-/* Author: Ioan Sucan */
+/* Author: Jeroen De Maeyer */
+/* Mostly copied from Ioan Sucan's code */
 
-#pragma once
-
-#include <moveit/ompl_interface/parameterization/model_based_state_space_factory.h>
+#include <moveit/ompl_interface/parameterization/joint_space/constrained_planning_state_space.h>
+#include <moveit/ompl_interface/parameterization/joint_space/constrained_planning_state_space_factory.h>
 
 namespace ompl_interface
 {
-class PoseModelStateSpaceFactory : public ModelBasedStateSpaceFactory
+ConstrainedPlanningStateSpaceFactory::ConstrainedPlanningStateSpaceFactory() : ModelBasedStateSpaceFactory()
 {
-public:
-  PoseModelStateSpaceFactory();
+  type_ = ConstrainedPlanningStateSpace::PARAMETERIZATION_TYPE;
+}
 
-  int canRepresentProblem(const std::string& group, const moveit_msgs::msg::MotionPlanRequest& req,
-                          const moveit::core::RobotModelConstPtr& robot_model) const override;
+int ConstrainedPlanningStateSpaceFactory::canRepresentProblem(
+    const std::string& /*group*/, const moveit_msgs::msg::MotionPlanRequest& /*req*/,
+    const moveit::core::RobotModelConstPtr& /*robot_model*/) const
+{
+  // Return the lowest priority currently existing in the ompl interface.
+  // This state space will only be selected if it is the only option to choose from.
+  // See header file for more info.
+  return -2;
+}
 
-protected:
-  ModelBasedStateSpacePtr allocStateSpace(const ModelBasedStateSpaceSpecification& space_spec) const override;
-};
+ModelBasedStateSpacePtr ompl_interface::ConstrainedPlanningStateSpaceFactory::allocStateSpace(
+    const ModelBasedStateSpaceSpecification& space_spec) const
+{
+  return std::make_shared<ConstrainedPlanningStateSpace>(space_spec);
+}
 }  // namespace ompl_interface

@@ -39,7 +39,7 @@
 
 namespace ompl_interface
 {
-constexpr char LOGNAME[] = "model_based_state_space";
+static const rclcpp::Logger LOGGER = rclcpp::get_logger("moveit.ompl_planning.model_based_state_space");
 }  // namespace ompl_interface
 
 ompl_interface::ModelBasedStateSpace::ModelBasedStateSpace(ModelBasedStateSpaceSpecification spec)
@@ -54,8 +54,8 @@ ompl_interface::ModelBasedStateSpace::ModelBasedStateSpace(ModelBasedStateSpaceS
   // make sure we have bounds for every joint stored within the spec (use default bounds if not specified)
   if (!spec_.joint_bounds_.empty() && spec_.joint_bounds_.size() != joint_model_vector_.size())
   {
-    ROS_ERROR_NAMED(LOGNAME, "Joint group '%s' has incorrect bounds specified. Using the default bounds instead.",
-                    spec_.joint_model_group_->getName().c_str());
+    RCLCPP_ERROR(LOGGER, "Joint group '%s' has incorrect bounds specified. Using the default bounds instead.",
+                 spec_.joint_model_group_->getName().c_str());
     spec_.joint_bounds_.clear();
   }
 
@@ -75,9 +75,9 @@ ompl_interface::ModelBasedStateSpace::ModelBasedStateSpace(ModelBasedStateSpaceS
   setTagSnapToSegment(0.95);
 
   /// expose parameters
-  params_.declareParam<double>("tag_snap_to_segment",
-                               std::bind(&ModelBasedStateSpace::setTagSnapToSegment, this, std::placeholders::_1),
-                               std::bind(&ModelBasedStateSpace::getTagSnapToSegment, this));
+  params_.declareParam<double>(
+      "tag_snap_to_segment", [this](double tag_snap_to_segment) { setTagSnapToSegment(tag_snap_to_segment); },
+      [this] { return getTagSnapToSegment(); });
 }
 
 ompl_interface::ModelBasedStateSpace::~ModelBasedStateSpace() = default;
@@ -90,10 +90,10 @@ double ompl_interface::ModelBasedStateSpace::getTagSnapToSegment() const
 void ompl_interface::ModelBasedStateSpace::setTagSnapToSegment(double snap)
 {
   if (snap < 0.0 || snap > 1.0)
-    ROS_WARN_NAMED(LOGNAME,
-                   "Snap to segment for tags is a ratio. It's value must be between 0.0 and 1.0. "
-                   "Value remains as previously set (%lf)",
-                   tag_snap_to_segment_);
+    RCLCPP_WARN(LOGGER,
+                "Snap to segment for tags is a ratio. It's value must be between 0.0 and 1.0. "
+                "Value remains as previously set (%lf)",
+                tag_snap_to_segment_);
   else
   {
     tag_snap_to_segment_ = snap;
@@ -289,7 +289,7 @@ ompl::base::StateSamplerPtr ompl_interface::ModelBasedStateSpace::allocDefaultSt
 
 void ompl_interface::ModelBasedStateSpace::printSettings(std::ostream& out) const
 {
-  out << "ModelBasedStateSpace '" << getName() << "' at " << this << std::endl;
+  out << "ModelBasedStateSpace '" << getName() << "' at " << this << '\n';
 }
 
 void ompl_interface::ModelBasedStateSpace::printState(const ompl::base::State* state, std::ostream& out) const
@@ -301,21 +301,21 @@ void ompl_interface::ModelBasedStateSpace::printState(const ompl::base::State* s
     const int vc = j->getVariableCount();
     for (int i = 0; i < vc; ++i)
       out << state->as<StateType>()->values[idx + i] << " ";
-    out << std::endl;
+    out << '\n';
   }
 
   if (state->as<StateType>()->isStartState())
-    out << "* start state" << std::endl;
+    out << "* start state \n";
   if (state->as<StateType>()->isGoalState())
-    out << "* goal state" << std::endl;
+    out << "* goal state \n";
   if (state->as<StateType>()->isValidityKnown())
   {
     if (state->as<StateType>()->isMarkedValid())
-      out << "* valid state" << std::endl;
+      out << "* valid state \n";
     else
-      out << "* invalid state" << std::endl;
+      out << "* invalid state \n";
   }
-  out << "Tag: " << state->as<StateType>()->tag << std::endl;
+  out << "Tag: " << state->as<StateType>()->tag << '\n';
 }
 
 void ompl_interface::ModelBasedStateSpace::copyToRobotState(moveit::core::RobotState& rstate,
