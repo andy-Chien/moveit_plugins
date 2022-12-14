@@ -12,19 +12,25 @@ endif()
 set(THIS_PACKAGE_INCLUDE_DEPENDS
   moveit_core
   moveit_ros_planning
+  moveit_ros_move_group
   moveit_ros_planning_interface
   rclcpp
-  std_msgs
+  pluginlib
   tf2
+  tf2_ros
   tf2_eigen
   tf2_geometry_msgs
-  tf2_ros
-  moveit_ros_move_group
-  moveit_ros_planning
-  pluginlib
+  std_msgs
   std_srvs
   Eigen3
   ompl
+)
+
+set(THIS_PACKAGE_LIBRARIES
+  ${PROJECT_NAME}_objectives
+  ${PROJECT_NAME}_planner
+  moveit_ompl_interface
+  moveit_ompl_planner_plugin
 )
 
 ## System dependencies are found with CMake's conventions
@@ -74,7 +80,7 @@ add_subdirectory(ompl_interface)
 #   DESTINATION ${CATKIN_PACKAGE_INCLUDE_DESTINATION}
 #   FILES_MATCHING PATTERN "*.h*"
 # )
-install(TARGETS moveit_ompl_interface moveit_ompl_planner_plugin
+install(TARGETS ${THIS_PACKAGE_LIBRARIES}
   EXPORT export_${PROJECT_NAME}
   LIBRARY DESTINATION lib
   ARCHIVE DESTINATION lib

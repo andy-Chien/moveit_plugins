@@ -77,6 +77,11 @@
 #include <moveit/ompl_interface/parameterization/work_space/pose_model_state_space_factory.h>
 #include <moveit/ompl_interface/detail/ompl_constraints.h>
 
+
+// Andy Chien ----------------------------------------------------
+#include "motion_plan/adapt_prm/adapt_prm.h"
+// ---------------------------------------------------------------
+
 using namespace std::placeholders;
 
 namespace ompl_interface
@@ -235,6 +240,14 @@ MultiQueryPlannerAllocator::allocatePersistentPlanner<ompl::geometric::LazyPRMst
 {
   return new og::LazyPRMstar(data);
 };
+// Andy Chien ----------------------------------------------------
+template <>
+inline ompl::base::Planner*
+MultiQueryPlannerAllocator::allocatePersistentPlanner<ompl::geometric::AdaptPRM>(const ob::PlannerData& data)
+{
+  return new og::AdaptPRM(data);
+};
+// ---------------------------------------------------------------
 
 PlanningContextManager::PlanningContextManager(moveit::core::RobotModelConstPtr robot_model,
                                                constraint_samplers::ConstraintSamplerManagerPtr csm)
@@ -304,6 +317,9 @@ void PlanningContextManager::registerDefaultPlanners()
   registerPlannerAllocatorHelper<og::SPARStwo>("geometric::SPARStwo");
   registerPlannerAllocatorHelper<og::STRIDE>("geometric::STRIDE");
   registerPlannerAllocatorHelper<og::TRRT>("geometric::TRRT");
+  // Andy Chien ----------------------------------------------------
+  registerPlannerAllocatorHelper<og::TRRT>("geometric::AdaptPRM");
+  // ---------------------------------------------------------------
 }
 
 void PlanningContextManager::registerDefaultStateSpaces()

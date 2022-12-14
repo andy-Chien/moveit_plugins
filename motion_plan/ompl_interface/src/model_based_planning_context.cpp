@@ -65,6 +65,10 @@
 #include "ompl/base/objectives/MinimaxObjective.h"
 #include "ompl/base/objectives/StateCostIntegralObjective.h"
 #include "ompl/base/objectives/MaximizeMinClearanceObjective.h"
+// Andy Chien ----------------------------------------------------
+#include "motion_plan/objectives/PathLengthUtilizationOptimizationObjective.h"
+#include "motion_plan/adapt_prm/adapt_prm.h"
+// ---------------------------------------------------------------
 #include <ompl/geometric/planners/prm/LazyPRM.h>
 
 namespace ompl_interface
@@ -348,6 +352,13 @@ void ompl_interface::ModelBasedPlanningContext::useConfig()
       objective =
           std::make_shared<ompl::base::MaximizeMinClearanceObjective>(ompl_simple_setup_->getSpaceInformation());
     }
+    // Andy Chien ----------------------------------------------------
+    else if (optimizer == "PathLengthUtilizationOptimizationObjective")
+    {
+      objective =
+          std::make_shared<ompl::base::PathLengthUtilizationOptimizationObjective>(ompl_simple_setup_->getSpaceInformation());
+    }
+    // ---------------------------------------------------------------
     else
     {
       objective =
@@ -356,6 +367,27 @@ void ompl_interface::ModelBasedPlanningContext::useConfig()
 
     ompl_simple_setup_->setOptimizationObjective(objective);
   }
+
+  // Andy Chien ----------------------------------------------------
+  it = cfg.find("optimization_threshold");
+  if (it != cfg.end())
+    objective->setCostThreshold(ompl::base::Cost(moveit::core::toDouble(it->second)));
+
+  it = cfg.find("max_cost");
+  if (it != cfg.end() && optimizer == "PathLengthUtilizationOptimizationObjective")
+    std::static_pointer_cast<ompl::base::PathLengthUtilizationOptimizationObjective>(objective)
+      ->setMaxCost(moveit::core::toDouble(it->second));
+
+  it = cfg.find("distance_weight");
+  if (it != cfg.end() && optimizer == "PathLengthUtilizationOptimizationObjective")
+    std::static_pointer_cast<ompl::base::PathLengthUtilizationOptimizationObjective>(objective)
+      ->setDistanceWeight(moveit::core::toDouble(it->second));
+
+  it = cfg.find("enable_exploration");
+  if (it != cfg.end() && optimizer == "PathLengthUtilizationOptimizationObjective")
+    std::static_pointer_cast<ompl::base::PathLengthUtilizationOptimizationObjective>(objective)
+      ->setEnableExploration(boost::lexical_cast<bool>(it->second));
+  // ---------------------------------------------------------------
 
   // Don't clear planner data if multi-query planning is enabled
   it = cfg.find("multi_query_planning_enabled");
@@ -621,11 +653,23 @@ void ompl_interface::ModelBasedPlanningContext::clear()
     // This means that we need to reset the validity flags for every node and edge in
     // the roadmap. For PRM and PRMstar we assume that the environment is static. If
     // this is not the case, then multi-query planning should not be enabled.
-    auto planner = dynamic_cast<ompl::geometric::LazyPRM*>(ompl_simple_setup_->getPlanner().get());
-    if (planner != nullptr)
+    
+    // Andy Chien ----------------------------------------------------
+    if (name_.find("AdaptPRM") != std::string::npos)
     {
-      planner->clearValidity();
+      auto planner = dynamic_cast<ompl::geometric::AdaptPRM*>(ompl_simple_setup_->getPlanner().get());
+      if (planner != nullptr){
+        planner->clearValidity();
+      }
     }
+    else
+    {
+      auto planner = dynamic_cast<ompl::geometric::LazyPRM*>(ompl_simple_setup_->getPlanner().get());
+      if (planner != nullptr){
+        planner->clearValidity();
+      }
+    }
+    // ---------------------------------------------------------------
   }
 #endif
   ompl_simple_setup_->clearStartStates();

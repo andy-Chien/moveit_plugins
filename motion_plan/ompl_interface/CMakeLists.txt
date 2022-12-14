@@ -43,7 +43,7 @@ ament_target_dependencies(${MOVEIT_LIB_NAME}
   Boost
 )
 
-# target_link_libraries(${MOVEIT_LIB_NAME} ${PROJECT_NAME}_planner ${PROJECT_NAME}_objectives ${OMPL_LIBRARIES} ${catkin_LIBRARIES} ${Boost_LIBRARIES})
+target_link_libraries(${MOVEIT_LIB_NAME} ${PROJECT_NAME}_planner ${PROJECT_NAME}_objectives)
 set_target_properties(${MOVEIT_LIB_NAME} PROPERTIES COMPILE_FLAGS "${CMAKE_CXX_FLAGS} ${OpenMP_CXX_FLAGS}")
 set_target_properties(${MOVEIT_LIB_NAME} PROPERTIES LINK_FLAGS "${OpenMP_CXX_FLAGS}")
 
@@ -63,14 +63,11 @@ ament_target_dependencies(moveit_ompl_planner_plugin
   OMPL
   Boost
 )
-target_link_libraries(moveit_ompl_planner_plugin ${MOVEIT_LIB_NAME} )
+target_link_libraries(moveit_ompl_planner_plugin ${PROJECT_NAME}_planner ${MOVEIT_LIB_NAME})
 
-# install(TARGETS ${MOVEIT_LIB_NAME} moveit_ompl_planner_plugin
-#   LIBRARY DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
-#   ARCHIVE DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
-#   RUNTIME DESTINATION ${CATKIN_GLOBAL_BIN_DESTINATION})
 install(TARGETS moveit_generate_state_database
-  RUNTIME DESTINATION lib/${PROJECT_NAME})
+  RUNTIME DESTINATION lib/${PROJECT_NAME}
+)
 install(DIRECTORY include/ DESTINATION include)
 
 if(BUILD_TESTING)
