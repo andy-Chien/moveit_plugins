@@ -318,7 +318,7 @@ void PlanningContextManager::registerDefaultPlanners()
   registerPlannerAllocatorHelper<og::STRIDE>("geometric::STRIDE");
   registerPlannerAllocatorHelper<og::TRRT>("geometric::TRRT");
   // Andy Chien ----------------------------------------------------
-  registerPlannerAllocatorHelper<og::TRRT>("geometric::AdaptPRM");
+  registerPlannerAllocatorHelper<og::AdaptPRM>("geometric::AdaptPRM");
   // ---------------------------------------------------------------
 }
 
