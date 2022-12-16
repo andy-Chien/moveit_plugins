@@ -37,7 +37,7 @@
 #include <boost/algorithm/string/trim.hpp>
 #include <boost/algorithm/string/split.hpp>
 #include <boost/algorithm/string/replace.hpp>
-#include <boost/lexical_cast.hpp>
+// #include <boost/lexical_cast.hpp>
 
 #include <moveit/ompl_interface/model_based_planning_context.h>
 #include <moveit/ompl_interface/detail/state_validity_checker.h>
@@ -285,6 +285,15 @@ void ompl_interface::ModelBasedPlanningContext::useConfig()
 
   // set the distance between waypoints when interpolating and collision checking.
   auto it = cfg.find("longest_valid_segment_fraction");
+  // Andy Chien ----------------------------------------------------
+  auto lexical_cast_bool = [=](std::string& param) ->bool {
+    if(param == "true" || param == "True" || param == "TRUE")
+      return true;
+    if(param == "false" || param == "False" || param == "FALSE")
+      return false;
+    throw "lexical_cast_bool failed.";
+  };
+  // ---------------------------------------------------------------
   // If one of the two variables is set.
   if (it != cfg.end() || max_solution_segment_length_ != 0.0)
   {
@@ -371,36 +380,46 @@ void ompl_interface::ModelBasedPlanningContext::useConfig()
   // Andy Chien ----------------------------------------------------
   it = cfg.find("optimization_threshold");
   if (it != cfg.end())
+  {
     objective->setCostThreshold(ompl::base::Cost(moveit::core::toDouble(it->second)));
-
+    cfg.erase(it);
+  }
   it = cfg.find("max_cost");
   if (it != cfg.end() && optimizer == "PathLengthUtilizationOptimizationObjective")
+  {
     std::static_pointer_cast<ompl::base::PathLengthUtilizationOptimizationObjective>(objective)
       ->setMaxCost(moveit::core::toDouble(it->second));
-
+    cfg.erase(it);
+  }
   it = cfg.find("distance_weight");
   if (it != cfg.end() && optimizer == "PathLengthUtilizationOptimizationObjective")
+  {
     std::static_pointer_cast<ompl::base::PathLengthUtilizationOptimizationObjective>(objective)
       ->setDistanceWeight(moveit::core::toDouble(it->second));
-
+    cfg.erase(it);
+  }
   it = cfg.find("enable_exploration");
   if (it != cfg.end() && optimizer == "PathLengthUtilizationOptimizationObjective")
+  {
     std::static_pointer_cast<ompl::base::PathLengthUtilizationOptimizationObjective>(objective)
-      ->setEnableExploration(boost::lexical_cast<bool>(it->second));
+      ->setEnableExploration(lexical_cast_bool(it->second));
+    cfg.erase(it);
+  }
   // ---------------------------------------------------------------
 
   // Don't clear planner data if multi-query planning is enabled
   it = cfg.find("multi_query_planning_enabled");
   if (it != cfg.end())
   {
-    multi_query_planning_enabled_ = boost::lexical_cast<bool>(it->second);
+    multi_query_planning_enabled_ = lexical_cast_bool(it->second);
+    cfg.erase(it);
   }
 
   // check whether the path returned by the planner should be interpolated
   it = cfg.find("interpolate");
   if (it != cfg.end())
   {
-    interpolate_ = boost::lexical_cast<bool>(it->second);
+    interpolate_ = lexical_cast_bool(it->second);
     cfg.erase(it);
   }
 
@@ -408,7 +427,7 @@ void ompl_interface::ModelBasedPlanningContext::useConfig()
   it = cfg.find("hybridize");
   if (it != cfg.end())
   {
-    hybridize_ = boost::lexical_cast<bool>(it->second);
+    hybridize_ = lexical_cast_bool(it->second);
     cfg.erase(it);
   }
 
