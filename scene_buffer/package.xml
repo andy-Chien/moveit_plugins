@@ -12,10 +12,14 @@
   <test_depend>ament_lint_auto</test_depend>
   <test_depend>ament_lint_common</test_depend>
 
+  <depend>rclcpp</depend>
   <depend>std_msgs</depend>
   <depend>shape_msgs</depend>
   <depend>moveit_msgs</depend>
   <depend>geometry_msgs</depend>
+  <depend>moveit_core</depend>
+
+  <depend>example_interfaces</depend>
 
   <export>
     <build_type>ament_cmake</build_type>
