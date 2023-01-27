@@ -5,6 +5,8 @@ if(CMAKE_COMPILER_IS_GNUCXX OR CMAKE_CXX_COMPILER_ID MATCHES "Clang")
   add_compile_options(-Wall -Wextra -Wpedantic)
 endif()
 
+add_compile_options(-g)
+
 set(THIS_PACKAGE_INCLUDE_DEPENDS
   rclcpp
   std_msgs
@@ -12,6 +14,7 @@ set(THIS_PACKAGE_INCLUDE_DEPENDS
   moveit_msgs
   geometry_msgs
   moveit_core
+  moveit_ros_planning
   example_interfaces
 )
 
@@ -43,7 +46,7 @@ target_include_directories(${PROJECT_NAME}_node PUBLIC
   $<INSTALL_INTERFACE:include>
 )
 ament_target_dependencies(${PROJECT_NAME}_node
-  rclcpp
+  ${THIS_PACKAGE_INCLUDE_DEPENDS}
 )
 
 target_compile_features(scene_buffer_node PUBLIC c_std_99 cxx_std_17)  # Require C99 and C++17
