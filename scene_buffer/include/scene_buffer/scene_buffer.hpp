@@ -23,3 +23,146 @@ private:
   std::map<std::string, moveit::core::RobotModelPtr> robot_models_;
   std::map<std::string, moveit::core::RobotStatePtr> robot_states_;
 };
+
+// // ==============================================================================
+// // getXXX function in robot_model.h
+// class robot_model_get
+// {
+//   const std::string& getName() const;
+//   const std::string& getModelFrame() const;
+//   const urdf::ModelInterfaceSharedPtr& getURDF() const;
+//   const srdf::ModelConstSharedPtr& getSRDF() const;
+//   const std::string& getRootJointName() const;
+//   const std::vector<const JointModel*>& getJointModels() const;
+//   const std::vector<JointModel*>& getJointModels();
+//   const std::vector<std::string>& getJointModelNames() const;
+//   const std::vector<const JointModel*>& getActiveJointModels() const;
+//   const std::vector<std::string>& getActiveJointModelNames() const;
+//   const std::vector<JointModel*>& getActiveJointModels();
+//   const std::vector<const JointModel*>& getSingleDOFJointModels() const;
+//   const std::vector<const JointModel*>& getMultiDOFJointModels() const;
+//   const std::vector<const JointModel*>& getContinuousJointModels() const;
+//   const std::vector<const JointModel*>& getMimicJointModels() const;
+//   const std::string& getRootLinkName() const;
+//   const std::vector<const LinkModel*>& getLinkModels() const;
+//   const std::vector<LinkModel*>& getLinkModels();
+//   const std::vector<std::string>& getLinkModelNames() const;
+//   const std::vector<const LinkModel*>& getLinkModelsWithCollisionGeometry() const;
+//   const std::vector<std::string>& getLinkModelNamesWithCollisionGeometry() const;
+//   const std::vector<const JointModelGroup*>& getJointModelGroups() const;
+//   const std::vector<JointModelGroup*>& getJointModelGroups();
+//   const std::vector<std::string>& getJointModelGroupNames() const;
+//   const std::vector<const JointModelGroup*>& getEndEffectors() const;
+//   const std::vector<std::string>& getVariableNames() const;
+//   const VariableBounds& getVariableBounds(const std::string& variable) const;
+//   const JointBoundsVector& getActiveJointModelsBounds() const;
+//   const JointModel* getRootJoint() const;;
+//   const JointModel* getJointModel(const std::string& joint) const;;
+//   const JointModel* getJointModel(size_t index) const;;
+//   JointModel* getJointModel(const std::string& joint);;
+//   const JointModel* getJointOfVariable(int variable_index) const;
+//   const JointModel* getJointOfVariable(const std::string& variable) const;
+//   const LinkModel* getRootLink() const;;
+//   const LinkModel* getLinkModel(const std::string& link, bool* has_link = nullptr) const;;
+//   const LinkModel* getLinkModel(size_t index) const;;
+//   LinkModel* getLinkModel(const std::string& link, bool* has_link = nullptr);;
+//   static const moveit::core::LinkModel* getRigidlyConnectedParentLinkModel(const LinkModel* link);;
+//   const JointModelGroup* getJointModelGroup(const std::string& name) const;;
+//   JointModelGroup* getJointModelGroup(const std::string& name);;
+//   const JointModelGroup* getEndEffector(const std::string& name) const;;
+//   JointModelGroup* getEndEffector(const std::string& name);;
+//   const JointModel* getCommonRoot(const JointModel* a, const JointModel* b) const;
+//   void getVariableRandomPositions(random_numbers::RandomNumberGenerator& rng, double* values) const;;
+//   void getVariableDefaultPositions(double* values) const;;
+//   void getVariableRandomPositions(random_numbers::RandomNumberGenerator& rng, std::vector<double>& values) const;;
+//   void getVariableDefaultPositions(std::vector<double>& values) const;
+//   void getVariableRandomPositions(random_numbers::RandomNumberGenerator& rng, std::map<std::string, double>& values) const;;
+//   void getVariableDefaultPositions(std::map<std::string, double>& values) const;;
+//   void getMissingVariableNames(const std::vector<std::string>& variables, std::vector<std::string>& missing_variables) const;;
+//   std::size_t getJointModelCount() const;
+//   std::size_t getLinkModelCount() const;
+//   std::size_t getLinkGeometryCount() const;
+//   std::size_t getVariableCount() const;
+//   size_t getVariableIndex(const std::string& variable) const;;
+// };
+// // =============================================================================
+
+// // =============================================================================
+// // getXXX function in robot_state.h
+// class robot_state_get
+// {
+//   const RobotModelConstPtr& getRobotModel() const;
+//   const std::vector<std::string>& getVariableNames() const;
+//   const Eigen::Isometry3d& getGlobalLinkTransform(const std::string& link_name);
+//   const Eigen::Isometry3d& getGlobalLinkTransform(const LinkModel* link);
+//   const Eigen::Isometry3d& getGlobalLinkTransform(const std::string& link_name) const;
+//   const Eigen::Isometry3d& getGlobalLinkTransform(const LinkModel* link) const;
+//   const Eigen::Isometry3d& getCollisionBodyTransform(const std::string& link_name, std::size_t index);
+//   const Eigen::Isometry3d& getCollisionBodyTransform(const LinkModel* link, std::size_t index);
+//   const Eigen::Isometry3d& getCollisionBodyTransform(const std::string& link_name, std::size_t index) const;
+//   const Eigen::Isometry3d& getCollisionBodyTransform(const LinkModel* link, std::size_t index) const;
+//   const Eigen::Isometry3d& getJointTransform(const std::string& joint_name);
+//   const Eigen::Isometry3d& getJointTransform(const JointModel* joint);
+//   const Eigen::Isometry3d& getJointTransform(const std::string& joint_name) const;
+//   const Eigen::Isometry3d& getJointTransform(const JointModel* joint) const;
+//   random_numbers::RandomNumberGenerator& getRandomNumberGenerator();
+//   const Eigen::Isometry3d& getFrameTransform(const std::string& frame_id, bool* frame_found = nullptr);;
+//   const Eigen::Isometry3d& getFrameTransform(const std::string& frame_id, bool* frame_found = nullptr) const;;
+//   const Eigen::Isometry3d& getFrameInfo(const std::string& frame_id, const LinkModel*& robot_link, bool& frame_found) const;;
+//   const LinkModel* getLinkModel(const std::string& link) const;
+//   const JointModel* getJointModel(const std::string& joint) const;
+//   const JointModelGroup* getJointModelGroup(const std::string& group) const;
+//   double* getVariablePositions();
+//   const double* getVariablePositions() const;
+//   double* getVariableVelocities();
+//   const double* getVariableVelocities() const;
+//   double* getVariableAccelerations();
+//   const double* getVariableAccelerations() const;
+//   double* getVariableEffort();
+//   const double* getVariableEffort() const;
+//   const double* getJointPositions(const std::string& joint_name) const;
+//   const double* getJointPositions(const JointModel* joint) const;
+//   const double* getJointVelocities(const std::string& joint_name) const;
+//   const double* getJointVelocities(const JointModel* joint) const;
+//   const double* getJointAccelerations(const std::string& joint_name) const;
+//   const double* getJointAccelerations(const JointModel* joint) const;
+//   const double* getJointEffort(const std::string& joint_name) const;
+//   const double* getJointEffort(const JointModel* joint) const;
+//   const moveit::core::LinkModel* getRigidlyConnectedParentLinkModel(const std::string& frame) const;;
+//   const AttachedBody* getAttachedBody(const std::string& name) const;;
+//   void getAttachedBodies(std::vector<const AttachedBody*>& attached_bodies) const;;
+//   void getAttachedBodies(std::vector<const AttachedBody*>& attached_bodies, const JointModelGroup* group) const;;
+//   void getAttachedBodies(std::vector<const AttachedBody*>& attached_bodies, const LinkModel* link_model) const;;
+//   void getRobotMarkers(visualization_msgs::msg::MarkerArray& arr, const std::vector<std::string>& link_names,
+//     const std_msgs::msg::ColorRGBA& color, const std::string& ns, const rclcpp::Duration& dur, bool include_attached = false) const;;
+//   void getRobotMarkers(visualization_msgs::msg::MarkerArray& arr, const std::vector<std::string>& link_names,
+//     const std_msgs::msg::ColorRGBA& color, const std::string& ns, const rclcpp::Duration& dur, bool include_attached = false);
+//   void getRobotMarkers(visualization_msgs::msg::MarkerArray& arr, const std::vector<std::string>& link_names, bool include_attached = false) const;;
+//   void getRobotMarkers(visualization_msgs::msg::MarkerArray& arr, const std::vector<std::string>& link_names, bool include_attached = false);
+//   void getMissingKeys(const std::map<std::string, double>& variable_map, std::vector<std::string>& missing_variables) const;;
+//   void getStateTreeJointString(std::ostream& ss, const JointModel* jm, const std::string& pfx0, bool last) const;;
+//   std::size_t getVariableCount() const;
+// }
+// // =============================================================================
+
+// // =============================================================================
+// // getXXX function in link_model.h
+// class link_model_get
+// {
+//   const std::string& getName() const;
+//   size_t getLinkIndex() const;
+//   int getFirstCollisionBodyTransformIndex() const;
+//   const JointModel* getParentJointModel() const;
+//   const LinkModel* getParentLinkModel() const;
+//   const std::vector<const JointModel*>& getChildJointModels() const;
+//   const Eigen::Isometry3d& getJointOriginTransform() const;
+//   const EigenSTL::vector_Isometry3d& getCollisionOriginTransforms() const;
+//   const std::vector<shapes::ShapeConstPtr>& getShapes() const;
+//   const Eigen::Vector3d& getShapeExtentsAtOrigin() const;
+//   const Eigen::Vector3d& getCenteredBoundingBoxOffset() const;
+//   const LinkTransformMap& getAssociatedFixedTransforms() const;
+//   const std::string& getVisualMeshFilename() const;
+//   const Eigen::Vector3d& getVisualMeshScale() const;
+//   const Eigen::Isometry3d& getVisualMeshOrigin() const;
+// }
+// // =============================================================================
