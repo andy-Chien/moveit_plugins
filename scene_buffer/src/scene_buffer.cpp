@@ -34,7 +34,9 @@ void SceneBuffer::load_robots(const std::vector<std::string>& robot_names)
     std::cout<<"XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX"<<std::endl;
     std::cout<<srdf_string<<std::endl;
 
-    
+    std::vector<Eigen::Isometry3d> link_poses;
+    std::vector<std::vector<Eigen::Isometry3d>> link_poses_;
+
     robot_model_loader::RobotModelLoader rml(
       param_client_node, robot_model_loader::RobotModelLoader::Options(urdf_string, srdf_string));
     robot_models_.insert(std::pair<
@@ -49,6 +51,23 @@ void SceneBuffer::load_robots(const std::vector<std::string>& robot_names)
     double ang = -0.1;
     robot_states_[robot_name]->setJointPositions("shoulder_lift_joint", &ang);
     robot_states_[robot_name]->update();
+    {
+      std::cout<<"BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB"<<std::endl;
+      const auto links = robot_models_[robot_name]->getLinkModels();
+      for(const auto link : links)
+      {
+        const auto shap = link->getShapes();
+        const auto trans = robot_states_[robot_name]->getGlobalLinkTransform(link);
+        Eigen::Matrix3d m = trans.rotation();
+        Eigen::Vector3d v = trans.translation();
+        std::cout << "Rotation: " << std::endl << m << std::endl;
+        std::cout << "Translation: " << std::endl << v << std::endl;
+        link_poses.push_back(trans);
+      }
+      link_poses_.push_back(link_poses);
+      link_poses.clear();
+      std::cout<<"BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB"<<std::endl;
+    }
     std::cout<<"eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"<<std::endl;
     robot_states_[robot_name]->printTransforms();
     ang = 0.1;
@@ -56,6 +75,25 @@ void SceneBuffer::load_robots(const std::vector<std::string>& robot_names)
     robot_states_[robot_name]->update();
     std::cout<<"ffffffffffffffffffffffffffffffffffffffffffffffffffff"<<std::endl;
     robot_states_[robot_name]->printTransforms();
+
+    {
+      std::cout<<"DDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD"<<std::endl;
+      const auto links = robot_models_[robot_name]->getLinkModels();
+      for(const auto link : links)
+      {
+        const auto shap = link->getShapes();
+        const auto trans = robot_states_[robot_name]->getGlobalLinkTransform(link);
+        Eigen::Matrix3d m = trans.rotation();
+        Eigen::Vector3d v = trans.translation();
+        std::cout << "Rotation: " << std::endl << m << std::endl;
+        std::cout << "Translation: " << std::endl << v << std::endl;
+        link_poses.push_back(trans);
+      }
+      link_poses_.push_back(link_poses);
+      link_poses.clear();
+      std::cout<<"DDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD"<<std::endl;
+    }
+    std::cout<<"size of link_poses = "<<link_poses_.size()<<" x "<<link_poses_[0].size()<<std::endl;
   }
 }
 
