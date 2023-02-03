@@ -9,10 +9,13 @@ add_compile_options(-g)
 
 set(THIS_PACKAGE_INCLUDE_DEPENDS
   rclcpp
+  mr_msgs
   std_msgs
   shape_msgs
   moveit_msgs
   geometry_msgs
+  trajectory_msgs
+  geometric_shapes
   moveit_core
   moveit_ros_planning
   example_interfaces

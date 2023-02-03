@@ -1,9 +1,12 @@
+#include <Eigen/Geometry>
+#include <geometric_shapes/shape_operations.h>
+
 #include "scene_buffer/scene_buffer.hpp"
 
 SceneBuffer::SceneBuffer(const std::string& node_name, const rclcpp::NodeOptions& node_options)
 : Node(node_name, node_options)
 {
-  get_obstacle_service_ = this->create_service<example_interfaces::srv::AddTwoInts>(
+  get_obstacle_service_ = this->create_service<ObstacleSrv>(
     "get_trajectory_obstacle", std::bind(
       &SceneBuffer::get_obstacle_cb, this, std::placeholders::_1, std::placeholders::_2));  
 }
@@ -82,6 +85,7 @@ void SceneBuffer::load_robots(const std::vector<std::string>& robot_names)
       for(const auto link : links)
       {
         const auto shap = link->getShapes();
+        std::cout << "shap size = " << shap.size() << std::endl;
         const auto trans = robot_states_[robot_name]->getGlobalLinkTransform(link);
         Eigen::Matrix3d m = trans.rotation();
         Eigen::Vector3d v = trans.translation();
@@ -97,8 +101,150 @@ void SceneBuffer::load_robots(const std::vector<std::string>& robot_names)
   }
 }
 
-void SceneBuffer::get_obstacle_cb(const std::shared_ptr<example_interfaces::srv::AddTwoInts::Request> req,
-  std::shared_ptr<example_interfaces::srv::AddTwoInts::Response> res)
+void SceneBuffer::get_obstacle_cb(const std::shared_ptr<ObstacleSrv::Request> req,
+  std::shared_ptr<ObstacleSrv::Response> res)
 {
+  if(collision_map_.find(req->robot_name) == collision_map_.end()){
+    RCLCPP_ERROR(get_logger(), "Request robot is not in the collision map");
+    return;
+  }
+  const rclcpp::Time start_time(
+    rclcpp::Time(req->header.stamp) + rclcpp::Duration(req->run_after));
+
+  const auto eigen_to_msg = [](const Eigen::Isometry3d& trans){
+    const Eigen::Quaterniond q(trans.rotation());
+    const Eigen::Vector3d v(trans.translation());
+    geometry_msgs::msg::Pose p;
+    p.position.x = v(0);
+    p.position.y = v(1);
+    p.position.z = v(2);
+    p.orientation.w = q.w();
+    p.orientation.x = q.x();
+    p.orientation.y = q.y();
+    p.orientation.z = q.z();
+    return p;
+  };
+
+  for(const auto& other_name : collision_map_[req->robot_name])
+  {
+    const rclcpp::Time other_start_time(
+      trajectories_[other_name]->header.stamp);
+    const auto traj_joint_names = trajectories_[other_name]->joint_names;
+
+    mr_msgs::msg::Obstacles obstacles;
+    const auto links = robot_models_[other_name]->getLinkModels();
+    for(const auto link : links)
+    {
+      const auto shape = link->getShapes();
+      if(shape.at(0)->type == shapes::MESH)
+      {
+        mesh_msg_from_shape(shape, obstacles.meshes);
+      }
+      else if(shape.at(0)->type == shapes::BOX || shape.at(0)->type == shapes::CONE || 
+        shape.at(0)->type == shapes::CYLINDER || shape.at(0)->type == shapes::SPHERE)
+      {
+
+      }
+    }
+
+    for(const auto& point : trajectories_[other_name]->points)
+    {
+      if(start_time > (other_start_time + rclcpp::Duration(point.time_from_start))){
+        continue;
+      }
+      for(size_t i=0; i<traj_joint_names.size(); i++)
+      {
+        robot_states_[other_name]->setJointPositions(
+          traj_joint_names[i], &(point.positions[i]));
+      }
+      robot_states_[other_name]->update();
+      for(const auto link : links)
+      {
+        const auto trans = robot_states_[other_name]->getGlobalLinkTransform(link);
+        const geometry_msgs::msg::Pose p = eigen_to_msg(trans);
+        obstacles.mesh_poses.push_back(p);
+        res->dynamic_obstacles.push_back(obstacles);
+      }
+    }
+  }
   return;
+}
+
+bool SceneBuffer::mesh_msg_from_shape(const std::vector<shapes::ShapeConstPtr>& shapes,
+                                      std::vector<shape_msgs::msg::Mesh> object_pose)
+{
+  // if (object.primitives.size() < object.primitive_poses.size())
+  // {
+  //   RCLCPP_ERROR(LOGGER, "More primitive shape poses than shapes in collision object message.");
+  //   return false;
+  // }
+  // if (object.meshes.size() < object.mesh_poses.size())
+  // {
+  //   RCLCPP_ERROR(LOGGER, "More mesh poses than meshes in collision object message.");
+  //   return false;
+  // }
+  // if (object.planes.size() < object.plane_poses.size())
+  // {
+  //   RCLCPP_ERROR(LOGGER, "More plane poses than planes in collision object message.");
+  //   return false;
+  // }
+
+  // const int num_shapes = object.primitives.size() + object.meshes.size() + object.planes.size();
+  // shapes.reserve(num_shapes);
+  // shape_poses.reserve(num_shapes);
+
+  // PlanningScene::poseMsgToEigen(object.pose, object_pose);
+
+  // bool switch_object_pose_and_shape_pose = false;
+  // if (num_shapes == 1)
+  //   if (moveit::core::isEmpty(object.pose))
+  //   {
+  //     switch_object_pose_and_shape_pose = true;  // If the object pose is not set but the shape pose is,
+  //                                                // use the shape's pose as the object pose.
+  //   }
+
+  // auto append = [&object_pose, &shapes, &shape_poses,
+  //                &switch_object_pose_and_shape_pose](shapes::Shape* s, const geometry_msgs::msg::Pose& pose_msg) {
+  //   if (!s)
+  //     return;
+  //   Eigen::Isometry3d pose;
+  //   PlanningScene::poseMsgToEigen(pose_msg, pose);
+  //   if (!switch_object_pose_and_shape_pose)
+  //     shape_poses.emplace_back(std::move(pose));
+  //   else
+  //   {
+  //     shape_poses.emplace_back(std::move(object_pose));
+  //     object_pose = pose;
+  //   }
+  //   shapes.emplace_back(shapes::ShapeConstPtr(s));
+  // };
+
+  // auto treat_shape_vectors = [&append](const auto& shape_vector,        // the shape_msgs of each type
+  //                                      const auto& shape_poses_vector,  // std::vector<const geometry_msgs::Pose>
+  //                                      const std::string& shape_type) {
+  //   if (shape_vector.size() > shape_poses_vector.size())
+  //   {
+  //     RCLCPP_DEBUG_STREAM(LOGGER, "Number of " << shape_type
+  //                                              << " does not match number of poses "
+  //                                                 "in collision object message. Assuming identity.");
+  //     for (std::size_t i = 0; i < shape_vector.size(); ++i)
+  //     {
+  //       if (i >= shape_poses_vector.size())
+  //       {
+  //         append(shapes::constructShapeFromMsg(shape_vector[i]),
+  //                geometry_msgs::msg::Pose());  // Empty shape pose => Identity
+  //       }
+  //       else
+  //         append(shapes::constructShapeFromMsg(shape_vector[i]), shape_poses_vector[i]);
+  //     }
+  //   }
+  //   else
+  //     for (std::size_t i = 0; i < shape_vector.size(); ++i)
+  //       append(shapes::constructShapeFromMsg(shape_vector[i]), shape_poses_vector[i]);
+  // };
+
+  // treat_shape_vectors(object.primitives, object.primitive_poses, std::string("primitive_poses"));
+  // treat_shape_vectors(object.meshes, object.mesh_poses, std::string("meshes"));
+  // treat_shape_vectors(object.planes, object.plane_poses, std::string("planes"));
+  return true;
 }

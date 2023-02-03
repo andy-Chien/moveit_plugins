@@ -1,12 +1,13 @@
 #include <rclcpp/rclcpp.hpp>
 
-#include <example_interfaces/srv/add_two_ints.hpp>
+#include <geometric_shapes/check_isometry.h>
 #include <moveit/robot_model/robot_model.h>
 #include <moveit/robot_state/robot_state.h>
 #include <moveit/robot_model_loader/robot_model_loader.h>
-
-
+#include <trajectory_msgs/msg/joint_trajectory.hpp>
 #include <memory>
+
+#include "mr_msgs/srv/get_robot_trajectory_obstacle.hpp"
 
 class SceneBuffer : public rclcpp::Node
 {
@@ -14,14 +15,23 @@ public:
   SceneBuffer(const std::string& node_name, const rclcpp::NodeOptions& node_options);
   void load_robots(const std::vector<std::string>& robot_names);
 private:
+  using ObstacleSrv = mr_msgs::srv::GetRobotTrajectoryObstacle;
   void get_obstacle_cb(
-    const std::shared_ptr<example_interfaces::srv::AddTwoInts::Request> req,
-    std::shared_ptr<example_interfaces::srv::AddTwoInts::Response> res);
+    const std::shared_ptr<ObstacleSrv::Request> req,
+    std::shared_ptr<ObstacleSrv::Response> res);
 
-  rclcpp::Service<example_interfaces::srv::AddTwoInts>::SharedPtr get_obstacle_service_;
+  bool mesh_msg_from_shape(
+    const std::vector<shapes::ShapeConstPtr>& shapes,
+    std::vector<shape_msgs::msg::Mesh> object_pose);
+
+  rclcpp::Service<ObstacleSrv>::SharedPtr get_obstacle_service_;
   std::shared_ptr<rclcpp::Node> param_client_node_;
   std::map<std::string, moveit::core::RobotModelPtr> robot_models_;
   std::map<std::string, moveit::core::RobotStatePtr> robot_states_;
+  std::map<std::string, std::vector<std::string>> collision_map_;
+
+  using TrajectoryMsg = trajectory_msgs::msg::JointTrajectory;
+  std::map<std::string, std::shared_ptr<TrajectoryMsg>> trajectories_;
 };
 
 // // ==============================================================================
