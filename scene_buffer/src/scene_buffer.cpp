@@ -122,17 +122,17 @@ void SceneBuffer::get_obstacle_cb(const std::shared_ptr<ObstacleSrv::Request> re
   const rclcpp::Time start_time(
     rclcpp::Time(req->header.stamp) + rclcpp::Duration(req->run_after));
 
-  const auto eigen_to_msg = [](const Eigen::Isometry3d& trans){
+  const auto& eigen_to_msg = [](const Eigen::Isometry3d& trans){
     const Eigen::Quaterniond q(trans.rotation());
     const Eigen::Vector3d v(trans.translation());
-    geometry_msgs::msg::Pose p;
-    p.position.x = v(0);
-    p.position.y = v(1);
-    p.position.z = v(2);
-    p.orientation.w = q.w();
-    p.orientation.x = q.x();
-    p.orientation.y = q.y();
-    p.orientation.z = q.z();
+    mr_msgs::msg::Pose p;
+    p.pose[0] = v(0);
+    p.pose[1] = v(1);
+    p.pose[2] = v(2);
+    p.pose[3] = q.w();
+    p.pose[4] = q.x();
+    p.pose[5] = q.y();
+    p.pose[6] = q.z();
     return p;
   };
   const auto& robot = robots_.at(req->robot_name);
@@ -145,8 +145,10 @@ void SceneBuffer::get_obstacle_cb(const std::shared_ptr<ObstacleSrv::Request> re
 
     const rclcpp::Time other_start_time(other_robot->trajectory->header.stamp);
     const auto& traj_joint_names = other_robot->trajectory->joint_names;
+    const auto& links = robot->model->getLinkModels();
 
     mr_msgs::msg::Obstacles obstacles;
+    obstacles.meshes_poses.resize(links.size());
 
     for(const auto& point : other_robot->trajectory->points)
     {
@@ -159,14 +161,15 @@ void SceneBuffer::get_obstacle_cb(const std::shared_ptr<ObstacleSrv::Request> re
           traj_joint_names[i], &(point.positions[i]));
       }
       other_robot->state->update();
-      for(const auto& link : robot->model->getLinkModels())
+
+      for(size_t i=0; i<links.size(); i++)
       {
+        const auto& link = links[i];
         const auto& trans = other_robot->state->getGlobalLinkTransform(link);
-        const geometry_msgs::msg::Pose& p = eigen_to_msg(trans);
-        obstacles.mesh_poses.push_back(p);
-        res->dynamic_obstacles.push_back(obstacles);
+        obstacles.meshes_poses[i].poses.push_back(eigen_to_msg(trans));
       }
     }
+    res->dynamic_obstacles.push_back(obstacles);
   }
   return;
 }
