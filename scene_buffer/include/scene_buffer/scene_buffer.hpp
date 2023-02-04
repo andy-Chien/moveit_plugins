@@ -7,6 +7,7 @@
 #include <trajectory_msgs/msg/joint_trajectory.hpp>
 #include <memory>
 
+#include "mr_msgs/msg/obstacles.hpp"
 #include "mr_msgs/srv/get_robot_trajectory_obstacle.hpp"
 
 class SceneBuffer : public rclcpp::Node
@@ -19,19 +20,28 @@ private:
   void get_obstacle_cb(
     const std::shared_ptr<ObstacleSrv::Request> req,
     std::shared_ptr<ObstacleSrv::Response> res);
+  
+  bool obstacles_from_links(
+    const std::vector<moveit::core::LinkModel*> links);
 
   bool mesh_msg_from_shape(
-    const std::vector<shapes::ShapeConstPtr>& shapes,
-    std::vector<shape_msgs::msg::Mesh> object_pose);
+    const shapes::ShapeConstPtr shapes, shape_msgs::msg::Mesh& mesh);
+
+  using TrajectoryMsg = trajectory_msgs::msg::JointTrajectory;
+  struct Robot
+  {
+  public:
+    moveit::core::RobotModelPtr model;
+    moveit::core::RobotStatePtr state;
+    mr_msgs::msg::Obstacles obstacles;
+    std::vector<std::string> collision_map;
+    std::shared_ptr<TrajectoryMsg> trajectory;
+  };
 
   rclcpp::Service<ObstacleSrv>::SharedPtr get_obstacle_service_;
   std::shared_ptr<rclcpp::Node> param_client_node_;
-  std::map<std::string, moveit::core::RobotModelPtr> robot_models_;
-  std::map<std::string, moveit::core::RobotStatePtr> robot_states_;
-  std::map<std::string, std::vector<std::string>> collision_map_;
 
-  using TrajectoryMsg = trajectory_msgs::msg::JointTrajectory;
-  std::map<std::string, std::shared_ptr<TrajectoryMsg>> trajectories_;
+  std::map<std::string, std::shared_ptr<Robot>> robots_;
 };
 
 // // ==============================================================================
