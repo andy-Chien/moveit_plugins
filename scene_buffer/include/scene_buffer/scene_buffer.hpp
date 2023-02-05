@@ -22,10 +22,10 @@ private:
     std::shared_ptr<ObstacleSrv::Response> res);
   
   bool obstacles_from_links(
-    const std::vector<moveit::core::LinkModel*> links);
+    const std::vector<moveit::core::LinkModel*> links, mr_msgs::msg::Obstacles& obstacles);
 
   bool mesh_msg_from_shape(
-    const shapes::ShapeConstPtr shapes, shape_msgs::msg::Mesh& mesh);
+    const shapes::ShapeConstPtr shape, shape_msgs::msg::Mesh& mesh);
 
   using TrajectoryMsg = trajectory_msgs::msg::JointTrajectory;
   struct Robot

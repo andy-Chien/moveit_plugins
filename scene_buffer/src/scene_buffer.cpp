@@ -101,7 +101,7 @@ void SceneBuffer::load_robots(const std::vector<std::string>& robot_names)
     }
     std::cout<<"size of link_poses = "<<link_poses_.size()<<" x "<<link_poses_[0].size()<<std::endl;
 
-    if(!obstacles_from_links(robot->model->getLinkModels())){
+    if(!obstacles_from_links(robot->model->getLinkModels(), robot->obstacles)){
       RCLCPP_ERROR(get_logger(), 
         "Convert from link to obstcale msg failed");
     }
@@ -175,12 +175,15 @@ void SceneBuffer::get_obstacle_cb(const std::shared_ptr<ObstacleSrv::Request> re
 }
 
 bool SceneBuffer::obstacles_from_links(
-  const std::vector<moveit::core::LinkModel*> links)
+  const std::vector<moveit::core::LinkModel*> links, mr_msgs::msg::Obstacles& obstacles)
 {
-  mr_msgs::msg::Obstacles obstacles;
+  obstacles.meshes.reserve(links.size());
   for(const auto& link : links)
   {
-    if(link->getShapes().size() != 1){
+    if(link->getShapes().size() == 0){
+      continue;
+    }
+    if(link->getShapes().size() > 1){
       RCLCPP_ERROR(get_logger(), 
         "Now it only support one shape for each link");
       return false;
@@ -188,8 +191,9 @@ bool SceneBuffer::obstacles_from_links(
     const auto& shape = link->getShapes().at(0);
     if(shape->type == shapes::MESH)
     {
-      shape_msgs::msg::Mesh mesh;
-      mesh_msg_from_shape(shape, mesh);
+      shape_msgs::msg::Mesh mesh_msg;
+      mesh_msg_from_shape(shape, mesh_msg);
+      obstacles.meshes.push_back(mesh_msg);
     }
     else if(shape->type == shapes::BOX || shape->type == shapes::CONE || 
       shape->type == shapes::CYLINDER || shape->type == shapes::SPHERE)
@@ -203,78 +207,19 @@ bool SceneBuffer::obstacles_from_links(
 bool SceneBuffer::mesh_msg_from_shape(const shapes::ShapeConstPtr shape,
                                       shape_msgs::msg::Mesh& mesh_msg)
 {
-  // if (object.primitives.size() < object.primitive_poses.size())
-  // {
-  //   RCLCPP_ERROR(LOGGER, "More primitive shape poses than shapes in collision object message.");
-  //   return false;
-  // }
-  // if (object.meshes.size() < object.mesh_poses.size())
-  // {
-  //   RCLCPP_ERROR(LOGGER, "More mesh poses than meshes in collision object message.");
-  //   return false;
-  // }
-  // if (object.planes.size() < object.plane_poses.size())
-  // {
-  //   RCLCPP_ERROR(LOGGER, "More plane poses than planes in collision object message.");
-  //   return false;
-  // }
-
-  // const int num_shapes = object.primitives.size() + object.meshes.size() + object.planes.size();
-  // shapes.reserve(num_shapes);
-  // shape_poses.reserve(num_shapes);
-
   // PlanningScene::poseMsgToEigen(object.pose, object_pose);
-
-  // bool switch_object_pose_and_shape_pose = false;
-  // if (num_shapes == 1)
-  //   if (moveit::core::isEmpty(object.pose))
-  //   {
-  //     switch_object_pose_and_shape_pose = true;  // If the object pose is not set but the shape pose is,
-  //                                                // use the shape's pose as the object pose.
-  //   }
-
-  // auto append = [&object_pose, &shapes, &shape_poses,
-  //                &switch_object_pose_and_shape_pose](shapes::Shape* s, const geometry_msgs::msg::Pose& pose_msg) {
-  //   if (!s)
-  //     return;
-  //   Eigen::Isometry3d pose;
-  //   PlanningScene::poseMsgToEigen(pose_msg, pose);
-  //   if (!switch_object_pose_and_shape_pose)
-  //     shape_poses.emplace_back(std::move(pose));
-  //   else
-  //   {
-  //     shape_poses.emplace_back(std::move(object_pose));
-  //     object_pose = pose;
-  //   }
-  //   shapes.emplace_back(shapes::ShapeConstPtr(s));
-  // };
-
-  // auto treat_shape_vectors = [&append](const auto& shape_vector,        // the shape_msgs of each type
-  //                                      const auto& shape_poses_vector,  // std::vector<const geometry_msgs::Pose>
-  //                                      const std::string& shape_type) {
-  //   if (shape_vector.size() > shape_poses_vector.size())
-  //   {
-  //     RCLCPP_DEBUG_STREAM(LOGGER, "Number of " << shape_type
-  //                                              << " does not match number of poses "
-  //                                                 "in collision object message. Assuming identity.");
-  //     for (std::size_t i = 0; i < shape_vector.size(); ++i)
-  //     {
-  //       if (i >= shape_poses_vector.size())
-  //       {
-  //         append(shapes::constructShapeFromMsg(shape_vector[i]),
-  //                geometry_msgs::msg::Pose());  // Empty shape pose => Identity
-  //       }
-  //       else
-  //         append(shapes::constructShapeFromMsg(shape_vector[i]), shape_poses_vector[i]);
-  //     }
-  //   }
-  //   else
-  //     for (std::size_t i = 0; i < shape_vector.size(); ++i)
-  //       append(shapes::constructShapeFromMsg(shape_vector[i]), shape_poses_vector[i]);
-  // };
-
-  // treat_shape_vectors(object.primitives, object.primitive_poses, std::string("primitive_poses"));
-  // treat_shape_vectors(object.meshes, object.mesh_poses, std::string("meshes"));
-  // treat_shape_vectors(object.planes, object.plane_poses, std::string("planes"));
+  const shapes::Mesh* mesh = static_cast<const shapes::Mesh*>(shape.get());
+  mesh_msg.triangles.resize(mesh->triangle_count);
+  mesh_msg.vertices.resize(mesh->vertex_count);
+  for(size_t i=0; i < mesh->triangle_count; i++){
+    std::move(&mesh->triangles[3 * i], &mesh->triangles[3 * i + 3], 
+      mesh_msg.triangles[i].vertex_indices.begin());
+  }
+  for(size_t i=0; i < mesh->vertex_count; i++)
+  {
+    mesh_msg.vertices[i].x = std::move(mesh->vertices[3 * i]);
+    mesh_msg.vertices[i].y = std::move(mesh->vertices[3 * i + 1]);
+    mesh_msg.vertices[i].z = std::move(mesh->vertices[3 * i + 2]);
+  }
   return true;
 }
