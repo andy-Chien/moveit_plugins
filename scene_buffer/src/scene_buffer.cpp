@@ -138,7 +138,15 @@ void SceneBuffer::load_robots(const std::vector<std::string>& robot_names)
 void SceneBuffer::get_obstacle_cb(const std::shared_ptr<ObstacleSrv::Request> req,
   std::shared_ptr<ObstacleSrv::Response> res)
 {
-  if(robots_.find(req->robot_name) == robots_.end()){
+  const std::string req_robot_name = [&]{
+    if(req->robot_name.size() > 1 && req->robot_name.at(0) == '/'){
+      return std::string(req->robot_name.begin() + 1, req->robot_name.end());
+    }else{
+      return req->robot_name;
+    }
+  }();
+
+  if(robots_.find(req_robot_name) == robots_.end()){
     RCLCPP_ERROR(get_logger(), "Requested robot has not been registered");
     return;
   }
@@ -158,7 +166,7 @@ void SceneBuffer::get_obstacle_cb(const std::shared_ptr<ObstacleSrv::Request> re
     p.pose[6] = q.z();
     return p;
   };
-  const auto& robot = robots_.at(req->robot_name);
+  const auto& robot = robots_.at(req_robot_name);
   res->dynamic_obstacles.reserve(robot->collision_map.size());
 
   for(const auto& other_name : robot->collision_map)
