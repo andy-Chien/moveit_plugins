@@ -211,15 +211,17 @@ bool SceneBuffer::mesh_msg_from_shape(const shapes::ShapeConstPtr shape,
   const shapes::Mesh* mesh = static_cast<const shapes::Mesh*>(shape.get());
   mesh_msg.triangles.resize(mesh->triangle_count);
   mesh_msg.vertices.resize(mesh->vertex_count);
+
   for(size_t i=0; i < mesh->triangle_count; i++){
-    std::move(&mesh->triangles[3 * i], &mesh->triangles[3 * i + 3], 
-      mesh_msg.triangles[i].vertex_indices.begin());
+    mesh_msg.triangles[i].vertex_indices[0] = mesh->triangles[3 * i];
+    mesh_msg.triangles[i].vertex_indices[1] = mesh->triangles[3 * i + 1];
+    mesh_msg.triangles[i].vertex_indices[2] = mesh->triangles[3 * i + 2];
   }
   for(size_t i=0; i < mesh->vertex_count; i++)
   {
-    mesh_msg.vertices[i].x = std::move(mesh->vertices[3 * i]);
-    mesh_msg.vertices[i].y = std::move(mesh->vertices[3 * i + 1]);
-    mesh_msg.vertices[i].z = std::move(mesh->vertices[3 * i + 2]);
+    mesh_msg.vertices[i].x = mesh->vertices[3 * i];
+    mesh_msg.vertices[i].y = mesh->vertices[3 * i + 1];
+    mesh_msg.vertices[i].z = mesh->vertices[3 * i + 2];
   }
   return true;
 }
