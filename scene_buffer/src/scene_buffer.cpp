@@ -101,7 +101,30 @@ void SceneBuffer::load_robots(const std::vector<std::string>& robot_names)
     }
     std::cout<<"size of link_poses = "<<link_poses_.size()<<" x "<<link_poses_[0].size()<<std::endl;
 
-    if(!obstacles_from_links(robot->model->getLinkModels(), robot->obstacles)){
+    for(const auto& link : robot->model->getLinkModels())
+    {
+      if(link->getShapes().size() == 0){
+        continue;
+      }
+      if(link->getShapes().size() > 1){
+        RCLCPP_ERROR(get_logger(), 
+          "Now it only support one shape for each link");
+        return;
+      }
+      const auto& type = link->getShapes().at(0)->type;
+
+      if(type == shapes::MESH)      {
+        robot->mesh_links.push_back(link);
+      }
+      else if(type == shapes::BOX || type == shapes::CONE || 
+              type == shapes::CYLINDER || type == shapes::SPHERE){
+        robot->prim_links.push_back(link);
+      }
+    }
+    robot->obstacles.meshes_poses.resize(robot->mesh_links.size());
+    robot->obstacles.primitives_poses.resize(robot->prim_links.size());
+
+    if(!obstacles_from_links(robot->mesh_links, robot->prim_links, robot->obstacles)){
       RCLCPP_ERROR(get_logger(), 
         "Convert from link to obstcale msg failed");
     }
@@ -136,6 +159,8 @@ void SceneBuffer::get_obstacle_cb(const std::shared_ptr<ObstacleSrv::Request> re
     return p;
   };
   const auto& robot = robots_.at(req->robot_name);
+  res->dynamic_obstacles.reserve(robot->collision_map.size());
+
   for(const auto& other_name : robot->collision_map)
   {
     const auto& other_robot = robots_.at(other_name);
@@ -145,10 +170,6 @@ void SceneBuffer::get_obstacle_cb(const std::shared_ptr<ObstacleSrv::Request> re
 
     const rclcpp::Time other_start_time(other_robot->trajectory->header.stamp);
     const auto& traj_joint_names = other_robot->trajectory->joint_names;
-    const auto& links = robot->model->getLinkModels();
-
-    mr_msgs::msg::Obstacles obstacles;
-    obstacles.meshes_poses.resize(links.size());
 
     for(const auto& point : other_robot->trajectory->points)
     {
@@ -162,66 +183,104 @@ void SceneBuffer::get_obstacle_cb(const std::shared_ptr<ObstacleSrv::Request> re
       }
       other_robot->state->update();
 
-      for(size_t i=0; i<links.size(); i++)
+      for(size_t i=0; i<other_robot->mesh_links.size(); i++)
       {
-        const auto& link = links[i];
-        const auto& trans = other_robot->state->getGlobalLinkTransform(link);
-        obstacles.meshes_poses[i].poses.push_back(eigen_to_msg(trans));
+        const auto& trans = other_robot->state->getGlobalLinkTransform(other_robot->mesh_links[i]);
+        other_robot->obstacles.meshes_poses[i].poses.push_back(eigen_to_msg(trans));
+      }
+      for(size_t i=0; i<other_robot->prim_links.size(); i++)
+      {
+        const auto& trans = other_robot->state->getGlobalLinkTransform(other_robot->prim_links[i]);
+        other_robot->obstacles.primitives_poses[i].poses.push_back(eigen_to_msg(trans));
       }
     }
-    res->dynamic_obstacles.push_back(obstacles);
+    res->dynamic_obstacles.push_back(other_robot->obstacles);
   }
   return;
 }
 
 bool SceneBuffer::obstacles_from_links(
-  const std::vector<moveit::core::LinkModel*> links, mr_msgs::msg::Obstacles& obstacles)
+  const std::vector<moveit::core::LinkModel*>& mesh_links, 
+  const std::vector<moveit::core::LinkModel*>& prim_links, 
+  mr_msgs::msg::Obstacles& obstacles)
 {
-  obstacles.meshes.reserve(links.size());
-  for(const auto& link : links)
-  {
-    if(link->getShapes().size() == 0){
-      continue;
+  obstacles.meshes.reserve(mesh_links.size());
+  obstacles.primitives.reserve(prim_links.size());
+
+  const auto&& mesh_msg_from_shape = [&](const shapes::Mesh* mesh){
+    shape_msgs::msg::Mesh mesh_msg;
+    mesh_msg.triangles.resize(mesh->triangle_count);
+    mesh_msg.vertices.resize(mesh->vertex_count);
+
+    for(size_t i=0; i < mesh->triangle_count; i++){
+      mesh_msg.triangles[i].vertex_indices[0] = mesh->triangles[3 * i];
+      mesh_msg.triangles[i].vertex_indices[1] = mesh->triangles[3 * i + 1];
+      mesh_msg.triangles[i].vertex_indices[2] = mesh->triangles[3 * i + 2];
     }
-    if(link->getShapes().size() > 1){
-      RCLCPP_ERROR(get_logger(), 
-        "Now it only support one shape for each link");
-      return false;
-    }
-    const auto& shape = link->getShapes().at(0);
-    if(shape->type == shapes::MESH)
+    for(size_t i=0; i < mesh->vertex_count; i++)
     {
-      shape_msgs::msg::Mesh mesh_msg;
-      mesh_msg_from_shape(shape, mesh_msg);
-      obstacles.meshes.push_back(mesh_msg);
+      mesh_msg.vertices[i].x = mesh->vertices[3 * i];
+      mesh_msg.vertices[i].y = mesh->vertices[3 * i + 1];
+      mesh_msg.vertices[i].z = mesh->vertices[3 * i + 2];
     }
-    else if(shape->type == shapes::BOX || shape->type == shapes::CONE || 
-      shape->type == shapes::CYLINDER || shape->type == shapes::SPHERE)
+    return mesh_msg;
+  };
+
+  const auto&& solid_msg_from_shape = [&](const shapes::ShapeConstPtr shape){
+    shape_msgs::msg::SolidPrimitive msg;
+    const auto type = shape->type;
+    switch(type)
     {
-
+    case shapes::BOX:
+    {
+      const auto box = static_cast<const shapes::Box*>(shape.get());
+      msg.type = shape_msgs::msg::SolidPrimitive::BOX;
+      msg.dimensions.resize(3);
+      msg.dimensions[0] = box->size[0];
+      msg.dimensions[1] = box->size[1];
+      msg.dimensions[2] = box->size[2];
+      break;
     }
-  }
-  return true;
-}
+    case shapes::SPHERE:
+    {
+      const auto sphere = static_cast<const shapes::Sphere*>(shape.get());
+      msg.type = shape_msgs::msg::SolidPrimitive::SPHERE;
+      msg.dimensions.resize(1);
+      msg.dimensions[0] = sphere->radius;
+      break;
+    }
+    case shapes::CYLINDER:
+    {
+      const auto cylinder = static_cast<const shapes::Cylinder*>(shape.get());
+      msg.type = shape_msgs::msg::SolidPrimitive::CYLINDER;
+      msg.dimensions.resize(2);
+      msg.dimensions[1] = cylinder->length;
+      msg.dimensions[0] = cylinder->radius;
+      break;
+    }
+    case shapes::CONE:
+    {
+      const auto cone = static_cast<const shapes::Cone*>(shape.get());
+      msg.type = shape_msgs::msg::SolidPrimitive::CONE;
+      msg.dimensions.resize(2);
+      msg.dimensions[1] = cone->length;
+      msg.dimensions[0] = cone->radius;
+      break;
+    }
+    default:
+      break;
+    }
+    return msg;
+  };
 
-bool SceneBuffer::mesh_msg_from_shape(const shapes::ShapeConstPtr shape,
-                                      shape_msgs::msg::Mesh& mesh_msg)
-{
-  // PlanningScene::poseMsgToEigen(object.pose, object_pose);
-  const shapes::Mesh* mesh = static_cast<const shapes::Mesh*>(shape.get());
-  mesh_msg.triangles.resize(mesh->triangle_count);
-  mesh_msg.vertices.resize(mesh->vertex_count);
-
-  for(size_t i=0; i < mesh->triangle_count; i++){
-    mesh_msg.triangles[i].vertex_indices[0] = mesh->triangles[3 * i];
-    mesh_msg.triangles[i].vertex_indices[1] = mesh->triangles[3 * i + 1];
-    mesh_msg.triangles[i].vertex_indices[2] = mesh->triangles[3 * i + 2];
+  for(const auto& link : mesh_links){
+    obstacles.meshes.push_back(std::move(mesh_msg_from_shape(
+      static_cast<const shapes::Mesh*>(link->getShapes().at(0).get()))
+    ));
   }
-  for(size_t i=0; i < mesh->vertex_count; i++)
-  {
-    mesh_msg.vertices[i].x = mesh->vertices[3 * i];
-    mesh_msg.vertices[i].y = mesh->vertices[3 * i + 1];
-    mesh_msg.vertices[i].z = mesh->vertices[3 * i + 2];
+  for(const auto& link : prim_links){
+    obstacles.primitives.push_back(std::move(
+      solid_msg_from_shape(link->getShapes().at(0))));
   }
   return true;
 }

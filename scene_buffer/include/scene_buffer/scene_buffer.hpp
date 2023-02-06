@@ -22,10 +22,8 @@ private:
     std::shared_ptr<ObstacleSrv::Response> res);
   
   bool obstacles_from_links(
-    const std::vector<moveit::core::LinkModel*> links, mr_msgs::msg::Obstacles& obstacles);
-
-  bool mesh_msg_from_shape(
-    const shapes::ShapeConstPtr shape, shape_msgs::msg::Mesh& mesh);
+    const std::vector<moveit::core::LinkModel*>& mesh_links, 
+    const std::vector<moveit::core::LinkModel*>& prim_links, mr_msgs::msg::Obstacles& obstacles);
 
   using TrajectoryMsg = trajectory_msgs::msg::JointTrajectory;
   struct Robot
@@ -36,6 +34,8 @@ private:
     mr_msgs::msg::Obstacles obstacles;
     std::vector<std::string> collision_map;
     std::shared_ptr<TrajectoryMsg> trajectory;
+    std::vector<moveit::core::LinkModel*> mesh_links;
+    std::vector<moveit::core::LinkModel*> prim_links;
   };
 
   rclcpp::Service<ObstacleSrv>::SharedPtr get_obstacle_service_;
