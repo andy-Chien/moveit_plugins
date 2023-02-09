@@ -174,7 +174,7 @@ void SceneBuffer::get_obstacle_cb(const std::shared_ptr<ObstacleSrv::Request> re
   };
   const auto& collision_robots =
     params_.collision_maps.robot_names_map.at(req_robot_name).collision_robots;
-  res->dynamic_obstacles.reserve(collision_robots.size());
+  res->obstacles_list.reserve(collision_robots.size());
 
   for(const auto& other_name : collision_robots)
   {
@@ -209,7 +209,7 @@ void SceneBuffer::get_obstacle_cb(const std::shared_ptr<ObstacleSrv::Request> re
         other_robot->obstacles.primitives_poses[i].poses.push_back(eigen_to_msg(trans));
       }
     }
-    res->dynamic_obstacles.push_back(other_robot->obstacles);
+    res->obstacles_list.push_back(other_robot->obstacles);
   }
   return;
 }
