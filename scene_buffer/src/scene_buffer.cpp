@@ -8,19 +8,25 @@ SceneBuffer::SceneBuffer(const std::string& node_name, const rclcpp::NodeOptions
 {
   get_obstacle_service_ = this->create_service<ObstacleSrv>(
     "get_trajectory_obstacle", std::bind(
-      &SceneBuffer::get_obstacle_cb, this, std::placeholders::_1, std::placeholders::_2));  
+      &SceneBuffer::get_obstacle_cb, this, std::placeholders::_1, std::placeholders::_2));
+}
+
+void SceneBuffer::init()
+{
+  // Create the parameter listener and get the parameters
+  param_listener_ = std::make_shared<ParamListener>(shared_from_this());
+  params_ = param_listener_->get_params();
+  load_robots(params_.robot_names);
 }
 
 void SceneBuffer::load_robots(const std::vector<std::string>& robot_names)
 {
-  for(auto robot_name : robot_names)
+  for(const auto& robot_name : robot_names)
   {
-    // robot_model_loader::RobotModelLoader rml(
-    //   shared_from_this(), robot_name + "/robot_description");
     rclcpp::NodeOptions node_options;
-    node_options.automatically_declare_parameters_from_overrides(true);
+    node_options.use_global_arguments(false);
     const auto param_client_node = std::make_shared<rclcpp::Node>(
-      "param_client_node", robot_name); //, node_options);
+      "param_client_node", robot_name, node_options);
     const auto param_client = std::make_shared<rclcpp::SyncParametersClient>(
       param_client_node, "move_group");
 
@@ -166,10 +172,11 @@ void SceneBuffer::get_obstacle_cb(const std::shared_ptr<ObstacleSrv::Request> re
     p.pose[6] = q.z();
     return p;
   };
-  const auto& robot = robots_.at(req_robot_name);
-  res->dynamic_obstacles.reserve(robot->collision_map.size());
+  const auto& collision_robots =
+    params_.collision_maps.robot_names_map.at(req_robot_name).collision_robots;
+  res->dynamic_obstacles.reserve(collision_robots.size());
 
-  for(const auto& other_name : robot->collision_map)
+  for(const auto& other_name : collision_robots)
   {
     const auto& other_robot = robots_.at(other_name);
     if(!other_robot->trajectory){

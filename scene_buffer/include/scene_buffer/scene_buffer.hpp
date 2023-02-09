@@ -9,13 +9,16 @@
 
 #include "mr_msgs/msg/obstacles.hpp"
 #include "mr_msgs/srv/get_robot_trajectory_obstacle.hpp"
+#include "scene_buffer_parameters.hpp"
 
 class SceneBuffer : public rclcpp::Node
 {
 public:
   SceneBuffer(const std::string& node_name, const rclcpp::NodeOptions& node_options);
-  void load_robots(const std::vector<std::string>& robot_names);
+  void init();
 private:
+  void load_robots(const std::vector<std::string>& robot_names);
+
   using ObstacleSrv = mr_msgs::srv::GetRobotTrajectoryObstacle;
   void get_obstacle_cb(
     const std::shared_ptr<ObstacleSrv::Request> req,
@@ -32,11 +35,15 @@ private:
     moveit::core::RobotModelPtr model;
     moveit::core::RobotStatePtr state;
     mr_msgs::msg::Obstacles obstacles;
-    std::vector<std::string> collision_map;
     std::shared_ptr<TrajectoryMsg> trajectory;
     std::vector<moveit::core::LinkModel*> mesh_links;
     std::vector<moveit::core::LinkModel*> prim_links;
   };
+
+  using Params = scene_buffer::Params;
+  using ParamListener = scene_buffer::ParamListener;
+  std::shared_ptr<ParamListener> param_listener_;
+  Params params_;
 
   rclcpp::Service<ObstacleSrv>::SharedPtr get_obstacle_service_;
   std::shared_ptr<rclcpp::Node> param_client_node_;

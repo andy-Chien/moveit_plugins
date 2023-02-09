@@ -19,6 +19,7 @@ set(THIS_PACKAGE_INCLUDE_DEPENDS
   moveit_core
   moveit_ros_planning
   example_interfaces
+  generate_parameter_library
 )
 
 ## System dependencies are found with CMake's conventions
@@ -27,12 +28,19 @@ foreach(Dependency IN ITEMS ${THIS_PACKAGE_INCLUDE_DEPENDS})
   find_package(${Dependency} REQUIRED)
 endforeach()
 
+generate_parameter_library(${PROJECT_NAME}_parameters
+  src/scene_buffer_parameters.yaml
+)
+
 add_library(${PROJECT_NAME} SHARED
   src/scene_buffer.cpp
 )
 target_include_directories(${PROJECT_NAME}
   PRIVATE
   include
+)
+target_link_libraries(${PROJECT_NAME} 
+  ${PROJECT_NAME}_parameters
 )
 ament_target_dependencies(${PROJECT_NAME}
   ${THIS_PACKAGE_INCLUDE_DEPENDS}
@@ -62,8 +70,20 @@ install(TARGETS ${PROJECT_NAME}
   INCLUDES DESTINATION include
 )
 
+install(TARGETS ${PROJECT_NAME} ${PROJECT_NAME}_parameters
+  EXPORT export_${PROJECT_NAME}
+  ARCHIVE DESTINATION lib
+  LIBRARY DESTINATION lib
+  RUNTIME DESTINATION bin
+)
+
 install(TARGETS ${PROJECT_NAME}_node
   DESTINATION lib/${PROJECT_NAME})
+
+install(
+  DIRECTORY config launch include
+  DESTINATION share/${PROJECT_NAME}
+)
 
 if(BUILD_TESTING)
   find_package(ament_lint_auto REQUIRED)

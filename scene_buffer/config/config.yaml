@@ -1,0 +1,13 @@
+scene_buffer:
+  ros__parameters:
+    robot_names:
+      - robot_1
+      - robot_2
+
+    collision_maps:
+      robot_1:
+        collision_robots:
+          - robot_2
+      robot_2:
+        collision_robots:
+          - robot_1
