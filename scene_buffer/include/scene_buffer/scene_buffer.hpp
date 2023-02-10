@@ -5,6 +5,7 @@
 #include <moveit/robot_state/robot_state.h>
 #include <moveit/robot_model_loader/robot_model_loader.h>
 #include <trajectory_msgs/msg/joint_trajectory.hpp>
+#include <sensor_msgs/msg/joint_state.h>
 #include <memory>
 
 #include "mr_msgs/msg/obstacles.hpp"
@@ -16,39 +17,81 @@ class SceneBuffer : public rclcpp::Node
 public:
   SceneBuffer(const std::string& node_name, const rclcpp::NodeOptions& node_options);
   void init();
-private:
-  void load_robots(const std::vector<std::string>& robot_names);
 
-  using ObstacleSrv = mr_msgs::srv::GetRobotTrajectoryObstacle;
-  void get_obstacle_cb(
-    const std::shared_ptr<ObstacleSrv::Request> req,
-    std::shared_ptr<ObstacleSrv::Response> res);
-  
-  bool obstacles_from_links(
-    const std::vector<moveit::core::LinkModel*>& mesh_links, 
-    const std::vector<moveit::core::LinkModel*>& prim_links, mr_msgs::msg::Obstacles& obstacles);
-
-  using TrajectoryMsg = trajectory_msgs::msg::JointTrajectory;
-  struct Robot
+  class Robot
   {
   public:
+    Robot(std::shared_ptr<rclcpp::Node> node, std::string robot_name)
+    : node_(node), robot_name_(robot_name)
+    {
+      load_robot(robot_name);
+
+      jnt_states_sub_ = node->create_subscription<sensor_msgs::msg::JointState>(
+        robot_name + "/joint_states", 1, 
+        [this](const sensor_msgs::msg::JointState::SharedPtr msg) -> void {
+          if(jnt_names_.size() != msg->name.size()){
+            jnt_names_ = msg->name;
+          }
+          jnt_pos_ = msg->position;
+        }
+      );
+    }
+
+    void update_to_current()
+    {
+      for(size_t i=0; i<jnt_names_.size(); i++){
+        state->setJointPositions(jnt_names_.at(i), &(jnt_pos_[i]));
+      }
+      state->update();
+    }
+
+    void clean_poses()
+    {
+      for(auto& x : obstacles.meshes_poses){
+        x.poses.clear();
+      }
+      for(auto& x : obstacles.primitives_poses){
+        x.poses.clear();
+      }
+    }
+
+
+    using TrajectoryMsg = trajectory_msgs::msg::JointTrajectory;
     moveit::core::RobotModelPtr model;
     moveit::core::RobotStatePtr state;
     mr_msgs::msg::Obstacles obstacles;
     std::shared_ptr<TrajectoryMsg> trajectory;
     std::vector<moveit::core::LinkModel*> mesh_links;
     std::vector<moveit::core::LinkModel*> prim_links;
+
+  private:
+    void load_robot(const std::string& robot_name);
+    bool obstacles_from_links();
+
+    std::shared_ptr<rclcpp::Node> node_;
+    std::string robot_name_;
+    std::vector<double> jnt_pos_;
+    std::vector<std::string> jnt_names_;
+    rclcpp::Subscription<sensor_msgs::msg::JointState>::SharedPtr jnt_states_sub_;
   };
+
+private:
+
+  using ObstacleSrv = mr_msgs::srv::GetRobotTrajectoryObstacle;
+  bool get_obstacle_cb(
+    const std::shared_ptr<rmw_request_id_t> req_header,
+    const std::shared_ptr<ObstacleSrv::Request> req,
+    std::shared_ptr<ObstacleSrv::Response> res);
+  
+
 
   using Params = scene_buffer::Params;
   using ParamListener = scene_buffer::ParamListener;
   std::shared_ptr<ParamListener> param_listener_;
   Params params_;
 
-  rclcpp::Service<ObstacleSrv>::SharedPtr get_obstacle_service_;
-  std::shared_ptr<rclcpp::Node> param_client_node_;
-
   std::map<std::string, std::shared_ptr<Robot>> robots_;
+  rclcpp::Service<ObstacleSrv>::SharedPtr get_obstacle_service_;
 };
 
 // // ==============================================================================

@@ -8,7 +8,7 @@ SceneBuffer::SceneBuffer(const std::string& node_name, const rclcpp::NodeOptions
 {
   get_obstacle_service_ = this->create_service<ObstacleSrv>(
     "get_trajectory_obstacle", std::bind(
-      &SceneBuffer::get_obstacle_cb, this, std::placeholders::_1, std::placeholders::_2));
+      &SceneBuffer::get_obstacle_cb, this, std::placeholders::_1, std::placeholders::_2, std::placeholders::_3));
 }
 
 void SceneBuffer::init()
@@ -16,134 +16,135 @@ void SceneBuffer::init()
   // Create the parameter listener and get the parameters
   param_listener_ = std::make_shared<ParamListener>(shared_from_this());
   params_ = param_listener_->get_params();
-  load_robots(params_.robot_names);
-}
-
-void SceneBuffer::load_robots(const std::vector<std::string>& robot_names)
-{
-  for(const auto& robot_name : robot_names)
+  rclcpp::SubscriptionOptions options;
+  for(const auto& robot_name : params_.robot_names)
   {
-    rclcpp::NodeOptions node_options;
-    node_options.use_global_arguments(false);
-    const auto param_client_node = std::make_shared<rclcpp::Node>(
-      "param_client_node", robot_name, node_options);
-    const auto param_client = std::make_shared<rclcpp::SyncParametersClient>(
-      param_client_node, "move_group");
-
-    auto robot = std::make_shared<Robot>();
-    
-    const std::string urdf_string = 
-      param_client->get_parameter<std::string>("robot_description");
-    const std::string srdf_string = 
-      param_client->get_parameter<std::string>("robot_description_semantic");
-    // const rclcpp::Parameter kinematics_param = 
-    //   param_client->get_parameter<rclcpp::Parameter>("robot_description_kinematics");
-
-    // param_client_node->declare_parameter<rclcpp::Parameter>(kinematics_param);
-
-    std::cout<<urdf_string<<std::endl;
-    std::cout<<"XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX"<<std::endl;
-    std::cout<<srdf_string<<std::endl;
-
-    std::vector<Eigen::Isometry3d> link_poses;
-    std::vector<std::vector<Eigen::Isometry3d>> link_poses_;
-
-    robot_model_loader::RobotModelLoader rml(
-      param_client_node, robot_model_loader::RobotModelLoader::Options(urdf_string, srdf_string));
-    robot->model = rml.getModel();
-    robot->state = std::make_shared<moveit::core::RobotState>(robot->model);
-
-    robot->state->setToDefaultValues();
-    std::cout<<"ccccccccccccccccccccccccccccccccccccccccccccccccccc"<<std::endl;
-    robot->model->printModelInfo(std::cout);
-    std::cout<<"ddddddddddddddddddddddddddddddddddddddddddddddddddd"<<std::endl;
-    robot->state->printTransforms();
-    double ang = -0.1;
-    robot->state->setJointPositions("shoulder_lift_joint", &ang);
-    robot->state->update();
-    {
-      std::cout<<"BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB"<<std::endl;
-      const auto& links = robot->model->getLinkModels();
-      for(const auto& link : links)
-      {
-        const auto& shap = link->getShapes();
-        std::cout << "shap size = " << shap.size() << std::endl;
-        const auto& trans = robot->state->getGlobalLinkTransform(link);
-        const Eigen::Matrix3d& m = trans.rotation();
-        const Eigen::Vector3d& v = trans.translation();
-        std::cout << "Rotation: " << std::endl << m << std::endl;
-        std::cout << "Translation: " << std::endl << v << std::endl;
-        link_poses.push_back(trans);
-      }
-      link_poses_.push_back(link_poses);
-      link_poses.clear();
-      std::cout<<"BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB"<<std::endl;
-    }
-    std::cout<<"eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"<<std::endl;
-    robot->state->printTransforms();
-    ang = 0.1;
-    robot->state->setJointPositions("shoulder_lift_joint", &ang);
-    robot->state->update();
-    std::cout<<"ffffffffffffffffffffffffffffffffffffffffffffffffffff"<<std::endl;
-    robot->state->printTransforms();
-
-    {
-      std::cout<<"DDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD"<<std::endl;
-      const auto links = robot->model->getLinkModels();
-      for(const auto link : links)
-      {
-        const auto& shap = link->getShapes();
-        std::cout << "shap size = " << shap.size() << std::endl;
-        const auto& trans = robot->state->getGlobalLinkTransform(link);
-        const Eigen::Matrix3d& m = trans.rotation();
-        const Eigen::Vector3d& v = trans.translation();
-        std::cout << "Rotation: " << std::endl << m << std::endl;
-        std::cout << "Translation: " << std::endl << v << std::endl;
-        link_poses.push_back(trans);
-      }
-      link_poses_.push_back(link_poses);
-      link_poses.clear();
-      std::cout<<"DDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD"<<std::endl;
-    }
-    std::cout<<"size of link_poses = "<<link_poses_.size()<<" x "<<link_poses_[0].size()<<std::endl;
-
-    for(const auto& link : robot->model->getLinkModels())
-    {
-      if(link->getShapes().size() == 0){
-        continue;
-      }
-      if(link->getShapes().size() > 1){
-        RCLCPP_ERROR(get_logger(), 
-          "Now it only support one shape for each link");
-        return;
-      }
-      const auto& type = link->getShapes().at(0)->type;
-
-      if(type == shapes::MESH)      {
-        robot->mesh_links.push_back(link);
-      }
-      else if(type == shapes::BOX || type == shapes::CONE || 
-              type == shapes::CYLINDER || type == shapes::SPHERE){
-        robot->prim_links.push_back(link);
-      }
-    }
-    robot->obstacles.meshes_poses.resize(robot->mesh_links.size());
-    robot->obstacles.primitives_poses.resize(robot->prim_links.size());
-
-    if(!obstacles_from_links(robot->mesh_links, robot->prim_links, robot->obstacles)){
-      RCLCPP_ERROR(get_logger(), 
-        "Convert from link to obstcale msg failed");
-    }
-
+    auto robot = std::make_shared<Robot>(shared_from_this(), robot_name);
     robots_.insert(std::pair<std::string, std::shared_ptr<Robot>>(
       robot_name, robot)
     );
   }
 }
 
-void SceneBuffer::get_obstacle_cb(const std::shared_ptr<ObstacleSrv::Request> req,
+void SceneBuffer::Robot::load_robot(const std::string& robot_name)
+{
+  rclcpp::NodeOptions node_options;
+  node_options.use_global_arguments(false);
+  const auto param_client_node = std::make_shared<rclcpp::Node>(
+    "param_client_node", robot_name, node_options);
+  const auto param_client = std::make_shared<rclcpp::SyncParametersClient>(
+    param_client_node, "move_group");
+
+  const std::string urdf_string = 
+    param_client->get_parameter<std::string>("robot_description");
+  const std::string srdf_string = 
+    param_client->get_parameter<std::string>("robot_description_semantic");
+  // const rclcpp::Parameter kinematics_param = 
+  //   param_client->get_parameter<rclcpp::Parameter>("robot_description_kinematics");
+
+  // param_client_node->declare_parameter<rclcpp::Parameter>(kinematics_param);
+
+  std::cout<<urdf_string<<std::endl;
+  std::cout<<"XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX"<<std::endl;
+  std::cout<<srdf_string<<std::endl;
+
+  std::vector<Eigen::Isometry3d> link_poses;
+  std::vector<std::vector<Eigen::Isometry3d>> link_poses_;
+
+  robot_model_loader::RobotModelLoader rml(
+    param_client_node, robot_model_loader::RobotModelLoader::Options(urdf_string, srdf_string));
+  model = rml.getModel();
+  state = std::make_shared<moveit::core::RobotState>(model);
+
+  state->setToDefaultValues();
+  std::cout<<"ccccccccccccccccccccccccccccccccccccccccccccccccccc"<<std::endl;
+  model->printModelInfo(std::cout);
+  std::cout<<"ddddddddddddddddddddddddddddddddddddddddddddddddddd"<<std::endl;
+  state->printTransforms();
+  double ang = -0.1;
+  state->setJointPositions("shoulder_lift_joint", &ang);
+  state->update();
+  {
+    std::cout<<"BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB"<<std::endl;
+    const auto& links = model->getLinkModels();
+    for(const auto& link : links)
+    {
+      const auto& shap = link->getShapes();
+      std::cout << "shap size = " << shap.size() << std::endl;
+      const auto& trans = state->getGlobalLinkTransform(link);
+      const Eigen::Matrix3d& m = trans.rotation();
+      const Eigen::Vector3d& v = trans.translation();
+      std::cout << "Rotation: " << std::endl << m << std::endl;
+      std::cout << "Translation: " << std::endl << v << std::endl;
+      link_poses.push_back(trans);
+    }
+    link_poses_.push_back(link_poses);
+    link_poses.clear();
+    std::cout<<"BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB"<<std::endl;
+  }
+  std::cout<<"eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"<<std::endl;
+  state->printTransforms();
+  ang = 0.1;
+  state->setJointPositions("shoulder_lift_joint", &ang);
+  state->update();
+  std::cout<<"ffffffffffffffffffffffffffffffffffffffffffffffffffff"<<std::endl;
+  state->printTransforms();
+
+  {
+    std::cout<<"DDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD"<<std::endl;
+    const auto links = model->getLinkModels();
+    for(const auto link : links)
+    {
+      const auto& shap = link->getShapes();
+      std::cout << "shap size = " << shap.size() << std::endl;
+      const auto& trans = state->getGlobalLinkTransform(link);
+      const Eigen::Matrix3d& m = trans.rotation();
+      const Eigen::Vector3d& v = trans.translation();
+      std::cout << "Rotation: " << std::endl << m << std::endl;
+      std::cout << "Translation: " << std::endl << v << std::endl;
+      link_poses.push_back(trans);
+    }
+    link_poses_.push_back(link_poses);
+    link_poses.clear();
+    std::cout<<"DDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD"<<std::endl;
+  }
+  std::cout<<"size of link_poses = "<<link_poses_.size()<<" x "<<link_poses_[0].size()<<std::endl;
+
+  for(const auto& link : model->getLinkModels())
+  {
+    if(link->getShapes().size() == 0){
+      continue;
+    }
+    if(link->getShapes().size() > 1){
+      RCLCPP_ERROR(node_->get_logger(), 
+        "Now it only support one shape for each link");
+      return;
+    }
+    const auto& type = link->getShapes().at(0)->type;
+
+    if(type == shapes::MESH)      {
+      mesh_links.push_back(link);
+    }
+    else if(type == shapes::BOX || type == shapes::CONE || 
+            type == shapes::CYLINDER || type == shapes::SPHERE){
+      prim_links.push_back(link);
+    }
+  }
+  obstacles.meshes_poses.resize(mesh_links.size());
+  obstacles.primitives_poses.resize(prim_links.size());
+
+  if(!obstacles_from_links()){
+    RCLCPP_ERROR(node_->get_logger(), 
+      "Convert from link to obstcale msg failed");
+  }
+}
+
+bool SceneBuffer::get_obstacle_cb(
+  const std::shared_ptr<rmw_request_id_t> /*req_header*/,
+  const std::shared_ptr<ObstacleSrv::Request> req,
   std::shared_ptr<ObstacleSrv::Response> res)
 {
+  rclcpp::Time t1 = this->now();
   const std::string req_robot_name = [&]{
     if(req->robot_name.size() > 1 && req->robot_name.at(0) == '/'){
       return std::string(req->robot_name.begin() + 1, req->robot_name.end());
@@ -154,7 +155,7 @@ void SceneBuffer::get_obstacle_cb(const std::shared_ptr<ObstacleSrv::Request> re
 
   if(robots_.find(req_robot_name) == robots_.end()){
     RCLCPP_ERROR(get_logger(), "Requested robot has not been registered");
-    return;
+    return false;
   }
   const rclcpp::Time start_time(
     rclcpp::Time(req->header.stamp) + rclcpp::Duration(req->run_after));
@@ -178,17 +179,41 @@ void SceneBuffer::get_obstacle_cb(const std::shared_ptr<ObstacleSrv::Request> re
 
   for(const auto& other_name : collision_robots)
   {
+    std::cout<<"other_name = "<<other_name<<std::endl;
     const auto& other_robot = robots_.at(other_name);
-    if(!other_robot->trajectory){
+    other_robot->clean_poses();
+
+    const auto& other_start_time = [&]{
+      return rclcpp::Time(other_robot->trajectory->header.stamp);
+    };
+    const auto& other_last_time = [&]{
+      return rclcpp::Time(other_start_time() + rclcpp::Duration(
+        other_robot->trajectory->points.back().time_from_start));
+    };
+    const auto& get_link_poses_from_state = [&]{
+      for(size_t i=0; i<other_robot->mesh_links.size(); i++){
+        const auto& trans = other_robot->state->getGlobalLinkTransform(other_robot->mesh_links[i]);
+        other_robot->obstacles.meshes_poses[i].poses.push_back(eigen_to_msg(trans));
+      }
+      for(size_t i=0; i<other_robot->prim_links.size(); i++){
+        const auto& trans = other_robot->state->getGlobalLinkTransform(other_robot->prim_links[i]);
+        other_robot->obstacles.primitives_poses[i].poses.push_back(eigen_to_msg(trans));
+      }
+    };
+
+    if(!other_robot->trajectory || start_time > other_last_time())
+    {
+      other_robot->update_to_current();
+      get_link_poses_from_state();
+      res->obstacles_list.push_back(other_robot->obstacles);
       continue;
     }
 
-    const rclcpp::Time other_start_time(other_robot->trajectory->header.stamp);
     const auto& traj_joint_names = other_robot->trajectory->joint_names;
 
     for(const auto& point : other_robot->trajectory->points)
     {
-      if(start_time > (other_start_time + rclcpp::Duration(point.time_from_start))){
+      if(start_time > (other_start_time() + rclcpp::Duration(point.time_from_start))){
         continue;
       }
       for(size_t i=0; i<traj_joint_names.size(); i++)
@@ -197,27 +222,16 @@ void SceneBuffer::get_obstacle_cb(const std::shared_ptr<ObstacleSrv::Request> re
           traj_joint_names[i], &(point.positions[i]));
       }
       other_robot->state->update();
-
-      for(size_t i=0; i<other_robot->mesh_links.size(); i++)
-      {
-        const auto& trans = other_robot->state->getGlobalLinkTransform(other_robot->mesh_links[i]);
-        other_robot->obstacles.meshes_poses[i].poses.push_back(eigen_to_msg(trans));
-      }
-      for(size_t i=0; i<other_robot->prim_links.size(); i++)
-      {
-        const auto& trans = other_robot->state->getGlobalLinkTransform(other_robot->prim_links[i]);
-        other_robot->obstacles.primitives_poses[i].poses.push_back(eigen_to_msg(trans));
-      }
+      get_link_poses_from_state();
     }
     res->obstacles_list.push_back(other_robot->obstacles);
   }
-  return;
+  rclcpp::Time t2 = this->now();
+  std::cout<<"get_obstacle_cb end time = "<<(t2 - t1).seconds()<<std::endl;
+  return true;
 }
 
-bool SceneBuffer::obstacles_from_links(
-  const std::vector<moveit::core::LinkModel*>& mesh_links, 
-  const std::vector<moveit::core::LinkModel*>& prim_links, 
-  mr_msgs::msg::Obstacles& obstacles)
+bool SceneBuffer::Robot::obstacles_from_links()
 {
   obstacles.meshes.reserve(mesh_links.size());
   obstacles.primitives.reserve(prim_links.size());
