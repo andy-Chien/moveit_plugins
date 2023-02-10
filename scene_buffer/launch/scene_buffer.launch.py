@@ -54,6 +54,7 @@ def launch_setup(context, *args, **kwargs):
         executable="scene_buffer_node",
         namespace=namespace,
         parameters=[{"use_sim_time": use_sim_time}, config],
+        # prefix=['xterm -e gdb -ex run --args'],
         output="screen",
     )
 
@@ -84,7 +85,7 @@ def generate_launch_description():
     declared_arguments.append(
         DeclareLaunchArgument(
             "use_sim_time",
-            default_value="true",
+            default_value="false",
             description="Using sim time or not",
         )
     )
