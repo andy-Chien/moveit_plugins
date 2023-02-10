@@ -24,8 +24,6 @@
   <depend>moveit_core</depend>
   <depend>pluginlib</depend>
 
-  <depend>example_interfaces</depend>
-
   <export>
     <build_type>ament_cmake</build_type>
   </export>

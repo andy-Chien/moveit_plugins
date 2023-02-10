@@ -16,7 +16,6 @@ set(THIS_PACKAGE_INCLUDE_DEPENDS
   geometric_shapes
   moveit_core
   moveit_ros_planning
-  example_interfaces
   pluginlib
 )
 

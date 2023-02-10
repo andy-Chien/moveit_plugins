@@ -18,7 +18,6 @@ set(THIS_PACKAGE_INCLUDE_DEPENDS
   geometric_shapes
   moveit_core
   moveit_ros_planning
-  example_interfaces
   generate_parameter_library
 )
 
@@ -62,19 +61,12 @@ ament_target_dependencies(${PROJECT_NAME}_node
 
 target_compile_features(scene_buffer_node PUBLIC c_std_99 cxx_std_17)  # Require C99 and C++17
 
-install(TARGETS ${PROJECT_NAME}
+install(TARGETS ${PROJECT_NAME} ${PROJECT_NAME}_parameters
   EXPORT export_${PROJECT_NAME}
   LIBRARY DESTINATION lib
   ARCHIVE DESTINATION lib
   RUNTIME DESTINATION bin
   INCLUDES DESTINATION include
-)
-
-install(TARGETS ${PROJECT_NAME} ${PROJECT_NAME}_parameters
-  EXPORT export_${PROJECT_NAME}
-  ARCHIVE DESTINATION lib
-  LIBRARY DESTINATION lib
-  RUNTIME DESTINATION bin
 )
 
 install(TARGETS ${PROJECT_NAME}_node
