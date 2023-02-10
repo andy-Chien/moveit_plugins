@@ -34,6 +34,7 @@
 
 /* Author: Ioan Sucan */
 
+#include <thread>
 #include <moveit/planning_request_adapter/planning_request_adapter.h>
 #include <class_loader/class_loader.hpp>
 
@@ -41,24 +42,62 @@
 
 namespace planning_adapter
 {
+rclcpp::Logger logger(rclcpp::get_logger("plan_adapter.trajectory_obstacles"));
+std::string service_name("/get_trajectory_obstacle");
 class AddTrajectoryObstacles : public planning_request_adapter::PlanningRequestAdapter
 {
 public:
   std::string getDescription() const override
   {
-    return "No Op";
+    return "An adapter to get surrounding robots trajectory obstacle from server";
   }
 
   bool adaptAndPlan(const PlannerFn& planner, const planning_scene::PlanningSceneConstPtr& planning_scene,
                     const planning_interface::MotionPlanRequest& req, planning_interface::MotionPlanResponse& res,
                     std::vector<std::size_t>& /*added_path_index*/) const override
   {
+    rclcpp::Time t1 = this_node_->now();
     auto obs_req = std::make_shared<mr_msgs::srv::GetRobotTrajectoryObstacle::Request>();
+    obs_req->header = req.start_state.joint_state.header;
+    obs_req->robot_name = robot_name_;
+
+    if(!client_->wait_for_service(std::chrono::milliseconds(500))){
+      RCLCPP_ERROR(logger,
+        "Wait for service '%s' failed!", service_name.c_str());
+      return false;
+    }
+    std::shared_future<std::shared_ptr<mr_msgs::srv::GetRobotTrajectoryObstacle_Response>> 
+      future = client_->async_send_request(obs_req).future.share();
+
+    if(future.wait_for(std::chrono::milliseconds(500)) != std::future_status::timeout)
+    {
+      for(const auto& obs : future.get()->obstacles_list){
+        if(!addObstacles(obs, planning_scene)){
+          RCLCPP_ERROR(logger, "Add obstacles failed!");
+          return false;
+        }
+      }
+    }else{
+      RCLCPP_ERROR(logger, "Service '%s' time out!", service_name.c_str());
+      return false;
+    }
+    rclcpp::Time t2 = this_node_->now();
+    RCLCPP_INFO(logger, "xxxxxx Adapt time = %f xxxxxx", (t2-t1).seconds());
     return planner(planning_scene, req, res);
   }
 
-  void initialize(const rclcpp::Node::SharedPtr& node, const std::string& /* parameter_namespace */) override
+  bool addObstacles(const mr_msgs::msg::Obstacles& obs, 
+                    const planning_scene::PlanningSceneConstPtr& scene) const
   {
+    std::cout<<"size = "<<obs.meshes.size()<<", "<<obs.meshes_poses.size()<<", "<<
+      obs.primitives.size()<<", "<<obs.primitives_poses.size()<<std::endl;
+    return true;
+  }
+
+  void initialize(const rclcpp::Node::SharedPtr& node, 
+                  const std::string& /* parameter_namespace */) override
+  {
+    this_node_ = std::make_shared<rclcpp::Node>("tarjectory_obstacles_getter");
     
     const auto& name_without_slash = [&](const char* ns){
       const auto& name = std::string(ns);
@@ -70,13 +109,19 @@ public:
     };
 
     robot_name_ = name_without_slash(node->get_namespace());
-    client_ = node->create_client<
+    client_ = this_node_->create_client<
       mr_msgs::srv::GetRobotTrajectoryObstacle>("/get_trajectory_obstacle");
-    RCLCPP_INFO(node->get_logger(), 
+
+    this_node_thread_ = std::thread([this](){rclcpp::spin(this_node_);});
+    
+    RCLCPP_INFO(logger, 
       "AddTrajectoryObstacles planning adapter for robot '%s' is loaded", robot_name_.c_str());
   }
+
 protected:
   std::string robot_name_;
+  std::thread this_node_thread_;
+  rclcpp::Node::SharedPtr this_node_;
   rclcpp::Client<mr_msgs::srv::GetRobotTrajectoryObstacle>::SharedPtr client_;
 };
 }  // namespace planning_adapter
