@@ -8,7 +8,10 @@ SceneBuffer::SceneBuffer(const std::string& node_name, const rclcpp::NodeOptions
 {
   get_obstacle_service_ = this->create_service<ObstacleSrv>(
     "get_trajectory_obstacle", std::bind(
-      &SceneBuffer::get_obstacle_cb, this, std::placeholders::_1, std::placeholders::_2, std::placeholders::_3));
+      &SceneBuffer::get_obstacle_cb, this, std::placeholders::_1, std::placeholders::_2));
+  set_trajectory_service_ = this->create_service<TrajectorySrv>(
+    "set_planned_trajectory", std::bind(
+      &SceneBuffer::set_trajectory_cb, this, std::placeholders::_1, std::placeholders::_2));
 }
 
 void SceneBuffer::init()
@@ -143,25 +146,10 @@ void SceneBuffer::Robot::load_robot(const std::string& urdf, const std::string& 
 }
 
 bool SceneBuffer::get_obstacle_cb(
-  const std::shared_ptr<rmw_request_id_t> /*req_header*/,
   const std::shared_ptr<ObstacleSrv::Request> req,
   std::shared_ptr<ObstacleSrv::Response> res)
 {
   rclcpp::Time t1 = this->now();
-  const std::string req_robot_name = [&]{
-    if(req->robot_name.size() > 1 && req->robot_name.at(0) == '/'){
-      return std::string(req->robot_name.begin() + 1, req->robot_name.end());
-    }else{
-      return req->robot_name;
-    }
-  }();
-
-  if(robots_.find(req_robot_name) == robots_.end()){
-    RCLCPP_ERROR(get_logger(), "Requested robot has not been registered");
-    return false;
-  }
-  const rclcpp::Time start_time(
-    rclcpp::Time(req->header.stamp) + rclcpp::Duration(req->run_after));
 
   const auto& eigen_to_msg = [](const Eigen::Isometry3d& trans){
     const Eigen::Quaterniond q(trans.rotation());
@@ -176,9 +164,6 @@ bool SceneBuffer::get_obstacle_cb(
     p.pose[6] = q.z();
     return p;
   };
-  const auto& collision_robots =
-    params_.collision_maps.robot_names_map.at(req_robot_name).collision_robots;
-  res->obstacles_list.reserve(collision_robots.size());
 
   const auto& tarj_start_time = [](const auto& trajectory){
     return rclcpp::Time(trajectory->header.stamp);
@@ -215,11 +200,34 @@ bool SceneBuffer::get_obstacle_cb(
       return true;
     };
 
+  const std::string req_robot_name = [](std::string& robot_name){
+    if(robot_name.size() > 1 && robot_name.at(0) == '/'){
+      return std::string(robot_name.begin() + 1, robot_name.end());
+    }else{
+      return robot_name;
+    }
+  }(req->robot_name);
+
+  if(robots_.find(req_robot_name) == robots_.end()){
+    RCLCPP_ERROR(get_logger(), "Requested robot has not been registered");
+    return false;
+  }
+
+  const rclcpp::Time start_time(
+    rclcpp::Time(req->header.stamp) + rclcpp::Duration(req->run_after));
+
+  const auto& collision_robots =
+    params_.collision_maps.robot_names_map.at(req_robot_name).collision_robots;
+
+  res->obstacles_list.reserve(collision_robots.size());
+
   for(const auto& other_name : collision_robots)
   {
-    std::cout<<"other_name = "<<other_name<<std::endl;
     const auto& other_robot = robots_.at(other_name);
     other_robot->clean_poses();
+
+    std::cout<<"other_name = "<<other_name<<", traj size = "<<
+      other_robot->trajectories.size()<<std::endl;
 
     if(other_robot->trajectories.size() == 0 || 
       check_all_last_time(start_time, other_robot->trajectories))
@@ -335,5 +343,16 @@ bool SceneBuffer::Robot::obstacles_from_links()
     obstacles.primitives.push_back(std::move(
       solid_msg_from_shape(link->getShapes().at(0))));
   }
+  return true;
+}
+
+bool SceneBuffer::set_trajectory_cb(
+  const std::shared_ptr<TrajectorySrv::Request> req,
+  std::shared_ptr<TrajectorySrv::Response> res)
+{
+  robots_.at(req->robot_name)->trajectories.push_back(
+    std::make_shared<TrajectoryMsg>(std::move(req->trajectory)));
+  
+  res->success = true;
   return true;
 }

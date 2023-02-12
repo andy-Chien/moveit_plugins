@@ -10,6 +10,7 @@
 
 #include "mr_msgs/msg/obstacles.hpp"
 #include "mr_msgs/srv/get_robot_trajectory_obstacle.hpp"
+#include "mr_msgs/srv/set_planned_trajectory.hpp"
 #include "scene_buffer_parameters.hpp"
 
 class SceneBuffer : public rclcpp::Node
@@ -80,10 +81,15 @@ public:
 private:
 
   using ObstacleSrv = mr_msgs::srv::GetRobotTrajectoryObstacle;
+  using TrajectorySrv = mr_msgs::srv::SetPlannedTrajectory;
+
   bool get_obstacle_cb(
-    const std::shared_ptr<rmw_request_id_t> req_header,
     const std::shared_ptr<ObstacleSrv::Request> req,
     std::shared_ptr<ObstacleSrv::Response> res);
+
+  bool set_trajectory_cb(
+    const std::shared_ptr<TrajectorySrv::Request> req,
+    std::shared_ptr<TrajectorySrv::Response> res);
   
 
 
@@ -94,6 +100,7 @@ private:
 
   std::map<std::string, std::shared_ptr<Robot>> robots_;
   rclcpp::Service<ObstacleSrv>::SharedPtr get_obstacle_service_;
+  rclcpp::Service<TrajectorySrv>::SharedPtr set_trajectory_service_;
 };
 
 // // ==============================================================================

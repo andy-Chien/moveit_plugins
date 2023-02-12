@@ -35,17 +35,22 @@
 /* Author: Ioan Sucan */
 
 #include <thread>
-#include <moveit/planning_request_adapter/planning_request_adapter.h>
+#include <Eigen/Geometry>
 #include <class_loader/class_loader.hpp>
 #include <geometric_shapes/shape_operations.h>
-#include <Eigen/Geometry>
+#include <moveit_msgs/msg/move_it_error_codes.hpp>
+#include <moveit_msgs/msg/motion_plan_response.hpp>
+#include <moveit/planning_request_adapter/planning_request_adapter.h>
 
+#include "mr_msgs/srv/set_planned_trajectory.hpp"
 #include "mr_msgs/srv/get_robot_trajectory_obstacle.hpp"
 
 namespace planning_adapter
 {
 rclcpp::Logger logger(rclcpp::get_logger("plan_adapter.trajectory_obstacles"));
-std::string service_name("/get_trajectory_obstacle");
+std::string get_obs_service_name("/get_trajectory_obstacle");
+std::string set_traj_service_name("/set_planned_trajectory");
+
 class AddTrajectoryObstacles : public planning_request_adapter::PlanningRequestAdapter
 {
 public:
@@ -73,22 +78,22 @@ public:
     **world_ = collision_detection::World(*(planning_scene->getWorld()));
     rclcpp::Time t_copy = this_node_->now();
 
-    if(!client_->wait_for_service(std::chrono::milliseconds(500))){
+    if(!get_obs_client_->wait_for_service(std::chrono::milliseconds(500))){
       RCLCPP_ERROR(logger,
-        "Wait for service '%s' failed!", service_name.c_str());
+        "'%s' wait for service '%s' failed!", robot_name_.c_str(), get_obs_service_name.c_str());
       return false;
     }
     std::shared_future<std::shared_ptr<mr_msgs::srv::GetRobotTrajectoryObstacle_Response>> 
-      future = client_->async_send_request(obs_req).future.share();
+      get_obs_future = get_obs_client_->async_send_request(obs_req).future.share();
 
-    if(future.wait_for(std::chrono::milliseconds(500)) != std::future_status::timeout)
+    if(get_obs_future.wait_for(std::chrono::milliseconds(500)) != std::future_status::timeout)
     {
       std::vector<shapes::ShapeConstPtr> shapes;
       EigenSTL::vector_Isometry3d shape_poses;
 
-      for(const auto& obs : future.get()->obstacles_list){
+      for(const auto& obs : get_obs_future.get()->obstacles_list){
         if(!shapesAndPosesFromObstacles(obs, shapes, shape_poses)){
-          RCLCPP_ERROR(logger, "Add obstacles failed!");
+          RCLCPP_ERROR(logger, "'%s' add obstacles failed!", robot_name_.c_str());
           return false;
         }
         const Eigen::Isometry3d& world_to_object_header_transform = 
@@ -97,14 +102,42 @@ public:
           obs.name, world_to_object_header_transform, shapes, shape_poses);
       }
     }else{
-      RCLCPP_ERROR(logger, "Service '%s' time out!", service_name.c_str());
+      RCLCPP_ERROR(logger, 
+        "'%s' service '%s' time out!", robot_name_.c_str(), get_obs_service_name.c_str());
       return false;
     }
 
     rclcpp::Time t_end = this_node_->now();
-    RCLCPP_INFO(logger, "Xx=Xx=Xx=Xx=Xx=Xx= Adapt time = %f, copy time = %f, =xX=xX=xX=xX=xX=xX", 
-      (t_end - t_start).seconds(), (t_copy - t_start).seconds());
-    return planner(*planning_scene_, req, res);
+    RCLCPP_INFO(logger, 
+      "Xx=Xx=Xx=Xx=Xx=Xx= '%s' adapt time = %f, copy time = %f, =xX=xX=xX=xX=xX=xX", 
+      robot_name_.c_str(), (t_end - t_start).seconds(), (t_copy - t_start).seconds());
+
+    if(!planner(*planning_scene_, req, res)){
+      return false;
+    }
+
+    moveit_msgs::msg::MotionPlanResponse res_msg;
+    res.getMessage(res_msg);
+    auto traj_req = std::make_shared<mr_msgs::srv::SetPlannedTrajectory::Request>();
+    traj_req->trajectory = res_msg.trajectory.joint_trajectory;
+    traj_req->robot_name = robot_name_;
+
+    if(!set_traj_client_->wait_for_service(std::chrono::milliseconds(500))){
+      RCLCPP_ERROR(logger,
+        "'%s' wait for service '%s' failed!", robot_name_.c_str(), set_traj_service_name.c_str());
+      res.error_code_.val = moveit_msgs::msg::MoveItErrorCodes::FAILURE;
+      return false;
+    }
+    std::shared_future<std::shared_ptr<mr_msgs::srv::SetPlannedTrajectory_Response>> 
+      set_traj_future = set_traj_client_->async_send_request(traj_req).future.share();
+    while(set_traj_future.wait_for(std::chrono::milliseconds(500)) == std::future_status::timeout){
+      RCLCPP_WARN(logger, 
+        "'%s' waiting for the response from set traj service!", robot_name_.c_str());
+    }
+    if(!set_traj_future.get()->success){
+      RCLCPP_ERROR(logger, "'%s' set planned trajectory failed!", robot_name_.c_str());
+    }
+    return set_traj_future.get()->success;
   }
 
   bool shapesAndPosesFromObstacles(const mr_msgs::msg::Obstacles& obs, 
@@ -113,6 +146,9 @@ public:
   {
     std::cout<<"size = "<<obs.meshes.size()<<", "<<obs.meshes_poses.size()<<", "<<
       obs.primitives.size()<<", "<<obs.primitives_poses.size()<<std::endl;
+    if(obs.meshes_poses.size() > 0){
+      std::cout<<"obs.meshes_poses[0].poses.size() = "<<obs.meshes_poses[0].poses.size()<<std::endl;
+    }
 
     const size_t num_shapes = obs.primitives.size() + obs.meshes.size();
     shapes.clear();
@@ -125,7 +161,8 @@ public:
       Eigen::Translation3d trans(msg.pose[0], msg.pose[1], msg.pose[2]);
       Eigen::Quaterniond quat(msg.pose[3], msg.pose[4], msg.pose[5], msg.pose[6]);
       if ((quat.x() == 0) && (quat.y() == 0) && (quat.z() == 0) && (quat.w() == 0)){
-        RCLCPP_WARN(logger, "Empty quaternion found in pose message. Setting to neutral orientation.");
+        RCLCPP_WARN(logger,
+          "Empty quaternion found in pose message. Setting to neutral orientation.");
         quat.setIdentity();
       }else{
         quat.normalize();
@@ -175,8 +212,11 @@ public:
     };
 
     robot_name_ = name_without_slash(node->get_namespace());
-    client_ = this_node_->create_client<
-      mr_msgs::srv::GetRobotTrajectoryObstacle>("/get_trajectory_obstacle");
+    get_obs_client_ = this_node_->create_client<
+      mr_msgs::srv::GetRobotTrajectoryObstacle>(get_obs_service_name);
+
+    set_traj_client_ = this_node_->create_client<
+      mr_msgs::srv::SetPlannedTrajectory>(set_traj_service_name);
 
     world_ = new std::shared_ptr<collision_detection::World>;
     planning_scene_ = new std::shared_ptr<planning_scene::PlanningScene>;
@@ -199,7 +239,8 @@ protected:
   rclcpp::Node::SharedPtr this_node_;
   std::shared_ptr<collision_detection::World>* world_;
   std::shared_ptr<planning_scene::PlanningScene>* planning_scene_;
-  rclcpp::Client<mr_msgs::srv::GetRobotTrajectoryObstacle>::SharedPtr client_;
+  rclcpp::Client<mr_msgs::srv::SetPlannedTrajectory>::SharedPtr set_traj_client_;
+  rclcpp::Client<mr_msgs::srv::GetRobotTrajectoryObstacle>::SharedPtr get_obs_client_;
 };
 }  // namespace planning_adapter
 
