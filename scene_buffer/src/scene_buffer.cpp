@@ -28,31 +28,34 @@ void SceneBuffer::init()
 
 void SceneBuffer::Robot::load_robot(const std::string& robot_name)
 {
-  rclcpp::NodeOptions node_options;
-  node_options.use_global_arguments(false);
-  const auto param_client_node = std::make_shared<rclcpp::Node>(
-    "param_client_node", robot_name, node_options);
-  const auto param_client = std::make_shared<rclcpp::SyncParametersClient>(
-    param_client_node, "move_group");
+  param_client_ = std::make_shared<rclcpp::AsyncParametersClient>(
+    node_, robot_name + "/move_group");
+  while(!param_client_->wait_for_service(std::chrono::milliseconds(500))){
+    RCLCPP_INFO(node_->get_logger(), "Waiting for get param service.");
+  }
 
-  const std::string urdf_string = 
-    param_client->get_parameter<std::string>("robot_description");
-  const std::string srdf_string = 
-    param_client->get_parameter<std::string>("robot_description_semantic");
-  // const rclcpp::Parameter kinematics_param = 
-  //   param_client->get_parameter<rclcpp::Parameter>("robot_description_kinematics");
+  const std::vector<std::string> params_name(
+    {"robot_description", "robot_description_semantic"});
 
-  // param_client_node->declare_parameter<rclcpp::Parameter>(kinematics_param);
+  param_client_->get_parameters(params_name,
+    [this](std::shared_future<std::vector<rclcpp::Parameter>> future) -> void {
+      const auto& params = future.get();
+      this->load_robot(params.at(0).as_string(), params.at(1).as_string());
+    }
+  );
+}
 
-  std::cout<<urdf_string<<std::endl;
+void SceneBuffer::Robot::load_robot(const std::string& urdf, const std::string& srdf)
+{
+  std::cout<<urdf<<std::endl;
   std::cout<<"XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX"<<std::endl;
-  std::cout<<srdf_string<<std::endl;
+  std::cout<<srdf<<std::endl;
 
   std::vector<Eigen::Isometry3d> link_poses;
   std::vector<std::vector<Eigen::Isometry3d>> link_poses_;
 
   robot_model_loader::RobotModelLoader rml(
-    param_client_node, robot_model_loader::RobotModelLoader::Options(urdf_string, srdf_string));
+    node_, robot_model_loader::RobotModelLoader::Options(urdf, srdf));
   model = rml.getModel();
   state = std::make_shared<moveit::core::RobotState>(model);
 

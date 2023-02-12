@@ -66,12 +66,14 @@ public:
 
   private:
     void load_robot(const std::string& robot_name);
+    void load_robot(const std::string& urdf, const std::string& srdf);
     bool obstacles_from_links();
 
     std::shared_ptr<rclcpp::Node> node_;
     std::string robot_name_;
     std::vector<double> jnt_pos_;
     std::vector<std::string> jnt_names_;
+    rclcpp::AsyncParametersClient::SharedPtr param_client_;
     rclcpp::Subscription<sensor_msgs::msg::JointState>::SharedPtr jnt_states_sub_;
   };
 
