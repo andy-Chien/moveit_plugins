@@ -15,6 +15,8 @@
 class SceneBuffer : public rclcpp::Node
 {
 public:
+  using TrajectoryMsg = trajectory_msgs::msg::JointTrajectory;
+
   SceneBuffer(const std::string& node_name, const rclcpp::NodeOptions& node_options);
   void init();
 
@@ -55,14 +57,12 @@ public:
       }
     }
 
-
-    using TrajectoryMsg = trajectory_msgs::msg::JointTrajectory;
     moveit::core::RobotModelPtr model;
     moveit::core::RobotStatePtr state;
     mr_msgs::msg::Obstacles obstacles;
-    std::shared_ptr<TrajectoryMsg> trajectory;
     std::vector<moveit::core::LinkModel*> mesh_links;
     std::vector<moveit::core::LinkModel*> prim_links;
+    std::vector<std::shared_ptr<TrajectoryMsg>> trajectories;
 
   private:
     void load_robot(const std::string& robot_name);

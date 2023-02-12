@@ -180,52 +180,73 @@ bool SceneBuffer::get_obstacle_cb(
     params_.collision_maps.robot_names_map.at(req_robot_name).collision_robots;
   res->obstacles_list.reserve(collision_robots.size());
 
+  const auto& tarj_start_time = [](const auto& trajectory){
+    return rclcpp::Time(trajectory->header.stamp);
+  };
+  const auto& tarj_last_time = [&tarj_start_time](const auto& trajectory){
+    return rclcpp::Time(tarj_start_time(trajectory) + rclcpp::Duration(
+      trajectory->points.back().time_from_start));
+  };
+
+  const auto& get_link_poses_from_state = 
+    [&eigen_to_msg](const std::shared_ptr<Robot>& robot){
+      for(size_t i=0; i<robot->mesh_links.size(); i++){
+        const auto& trans = robot->state->getGlobalLinkTransform(robot->mesh_links[i]);
+        robot->obstacles.meshes_poses[i].poses.push_back(eigen_to_msg(trans));
+      }
+      for(size_t i=0; i<robot->prim_links.size(); i++){
+        const auto& trans = robot->state->getGlobalLinkTransform(robot->prim_links[i]);
+        robot->obstacles.primitives_poses[i].poses.push_back(eigen_to_msg(trans));
+      }
+    };
+
+  const auto& check_last_time = 
+    [&tarj_start_time, &tarj_last_time](const rclcpp::Time t, const auto& traj){
+      return tarj_start_time(traj).nanoseconds() > 0 && t > tarj_last_time(traj);
+    };
+
+  const auto& check_all_last_time = 
+    [&check_last_time](const rclcpp::Time t, const auto& trajectories){
+      for(const auto& traj : trajectories){
+        if(!check_last_time(t, traj)){
+          return false;
+        }
+      }
+      return true;
+    };
+
   for(const auto& other_name : collision_robots)
   {
     std::cout<<"other_name = "<<other_name<<std::endl;
     const auto& other_robot = robots_.at(other_name);
     other_robot->clean_poses();
 
-    const auto& other_start_time = [&]{
-      return rclcpp::Time(other_robot->trajectory->header.stamp);
-    };
-    const auto& other_last_time = [&]{
-      return rclcpp::Time(other_start_time() + rclcpp::Duration(
-        other_robot->trajectory->points.back().time_from_start));
-    };
-    const auto& get_link_poses_from_state = [&]{
-      for(size_t i=0; i<other_robot->mesh_links.size(); i++){
-        const auto& trans = other_robot->state->getGlobalLinkTransform(other_robot->mesh_links[i]);
-        other_robot->obstacles.meshes_poses[i].poses.push_back(eigen_to_msg(trans));
-      }
-      for(size_t i=0; i<other_robot->prim_links.size(); i++){
-        const auto& trans = other_robot->state->getGlobalLinkTransform(other_robot->prim_links[i]);
-        other_robot->obstacles.primitives_poses[i].poses.push_back(eigen_to_msg(trans));
-      }
-    };
-
-    if(!other_robot->trajectory || start_time > other_last_time())
+    if(other_robot->trajectories.size() == 0 || 
+      check_all_last_time(start_time, other_robot->trajectories))
     {
       other_robot->update_to_current();
-      get_link_poses_from_state();
+      get_link_poses_from_state(other_robot);
       res->obstacles_list.push_back(other_robot->obstacles);
       continue;
     }
 
-    const auto& traj_joint_names = other_robot->trajectory->joint_names;
-
-    for(const auto& point : other_robot->trajectory->points)
+    for(const auto& trajectory : other_robot->trajectories)
     {
-      if(start_time > (other_start_time() + rclcpp::Duration(point.time_from_start))){
-        continue;
-      }
-      for(size_t i=0; i<traj_joint_names.size(); i++)
+      const auto& traj_joint_names = trajectory->joint_names;
+
+      for(const auto& point : trajectory->points)
       {
-        other_robot->state->setJointPositions(
-          traj_joint_names[i], &(point.positions[i]));
+        if(start_time > (tarj_start_time(trajectory) + rclcpp::Duration(point.time_from_start))){
+          continue;
+        }
+        for(size_t i=0; i<traj_joint_names.size(); i++)
+        {
+          other_robot->state->setJointPositions(
+            traj_joint_names[i], &(point.positions[i]));
+        }
+        other_robot->state->update();
+        get_link_poses_from_state(other_robot);
       }
-      other_robot->state->update();
-      get_link_poses_from_state();
     }
     res->obstacles_list.push_back(other_robot->obstacles);
   }
