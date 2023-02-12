@@ -58,15 +58,20 @@ public:
                     const planning_interface::MotionPlanRequest& req, planning_interface::MotionPlanResponse& res,
                     std::vector<std::size_t>& /*added_path_index*/) const override
   {
-    rclcpp::Time t1 = this_node_->now();
+    rclcpp::Time t_start = this_node_->now();
     auto obs_req = std::make_shared<mr_msgs::srv::GetRobotTrajectoryObstacle::Request>();
     obs_req->header = req.start_state.joint_state.header;
     obs_req->robot_name = robot_name_;
 
-    const auto world_copied = std::make_shared<
-      collision_detection::World>(*(planning_scene->getWorld()));
-    rclcpp::Time t_cw = this_node_->now();
-
+    if(!(*planning_scene_) || !(*world_))
+    {
+      *world_ = std::make_shared<collision_detection::World>(*(planning_scene->getWorld()));
+      *planning_scene_ = std::make_shared<planning_scene::PlanningScene>(
+        planning_scene->getRobotModel(), *world_);
+    }
+    (*planning_scene_)->setCurrentState(planning_scene->getCurrentState());
+    **world_ = collision_detection::World(*(planning_scene->getWorld()));
+    rclcpp::Time t_copy = this_node_->now();
 
     if(!client_->wait_for_service(std::chrono::milliseconds(500))){
       RCLCPP_ERROR(logger,
@@ -88,22 +93,18 @@ public:
         }
         const Eigen::Isometry3d& world_to_object_header_transform = 
           planning_scene->getFrameTransform(obs.header.frame_id);
-        world_copied->addToObject(
+        (*world_)->addToObject(
           obs.name, world_to_object_header_transform, shapes, shape_poses);
       }
     }else{
       RCLCPP_ERROR(logger, "Service '%s' time out!", service_name.c_str());
       return false;
     }
-    rclcpp::Time t_cp = this_node_->now();
-    const auto planning_scene_copied = std::make_shared<
-      planning_scene::PlanningScene>(planning_scene->getRobotModel(), world_copied);
-    planning_scene_copied->setCurrentState(planning_scene->getCurrentState());
 
-    rclcpp::Time t2 = this_node_->now();
-    RCLCPP_INFO(logger, "xxxxxx Adapt time = %f, world copy time = %f, scene copy time = %f xxxxxx", 
-      (t2 - t1).seconds(), (t_cw - t1).seconds(), (t2 - t_cp).seconds());
-    return planner(planning_scene_copied, req, res);
+    rclcpp::Time t_end = this_node_->now();
+    RCLCPP_INFO(logger, "Xx=Xx=Xx=Xx=Xx=Xx= Adapt time = %f, copy time = %f, =xX=xX=xX=xX=xX=xX", 
+      (t_end - t_start).seconds(), (t_copy - t_start).seconds());
+    return planner(*planning_scene_, req, res);
   }
 
   bool shapesAndPosesFromObstacles(const mr_msgs::msg::Obstacles& obs, 
@@ -177,16 +178,27 @@ public:
     client_ = this_node_->create_client<
       mr_msgs::srv::GetRobotTrajectoryObstacle>("/get_trajectory_obstacle");
 
+    world_ = new std::shared_ptr<collision_detection::World>;
+    planning_scene_ = new std::shared_ptr<planning_scene::PlanningScene>;
+
     this_node_thread_ = std::thread([this](){rclcpp::spin(this_node_);});
     
     RCLCPP_INFO(logger, 
       "AddTrajectoryObstacles planning adapter for robot '%s' is loaded", robot_name_.c_str());
   }
 
+  ~AddTrajectoryObstacles() override
+  {
+    delete world_;
+    delete planning_scene_;
+  }
+
 protected:
   std::string robot_name_;
   std::thread this_node_thread_;
   rclcpp::Node::SharedPtr this_node_;
+  std::shared_ptr<collision_detection::World>* world_;
+  std::shared_ptr<planning_scene::PlanningScene>* planning_scene_;
   rclcpp::Client<mr_msgs::srv::GetRobotTrajectoryObstacle>::SharedPtr client_;
 };
 }  // namespace planning_adapter
