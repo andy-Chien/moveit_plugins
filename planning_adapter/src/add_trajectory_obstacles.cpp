@@ -41,6 +41,7 @@
 #include <moveit_msgs/msg/move_it_error_codes.hpp>
 #include <moveit_msgs/msg/motion_plan_response.hpp>
 #include <moveit/planning_request_adapter/planning_request_adapter.h>
+#include <moveit/collision_detection_fcl/collision_detector_allocator_fcl.h>
 
 #include "mr_msgs/srv/set_planned_trajectory.hpp"
 #include "mr_msgs/srv/get_robot_trajectory_obstacle.hpp"
@@ -68,15 +69,21 @@ public:
     obs_req->header = req.start_state.joint_state.header;
     obs_req->robot_name = robot_name_;
 
-    if(!(*planning_scene_) || !(*world_))
+    if(!(*planning_scene_))
     {
-      *world_ = std::make_shared<collision_detection::World>(*(planning_scene->getWorld()));
       *planning_scene_ = std::make_shared<planning_scene::PlanningScene>(
-        planning_scene->getRobotModel(), *world_);
+        planning_scene->getRobotModel());
+      copyPlanningScene(planning_scene, *planning_scene_);
     }
     (*planning_scene_)->setCurrentState(planning_scene->getCurrentState());
-    **world_ = collision_detection::World(*(planning_scene->getWorld()));
+    const collision_detection::WorldPtr& world = (*planning_scene_)->getWorldNonConst();
+    *world = collision_detection::World(*(planning_scene->getWorld()));
     rclcpp::Time t_copy = this_node_->now();
+    std::cout<<"============================================================================="<<std::endl;
+    std::cout<<"world->size() = "<<world->size()<<std::endl;
+    std::cout<<"planning_scene->getWorld()->size() = "<<planning_scene->getWorld()->size()<<std::endl;
+    std::cout<<"(*planning_scene_)->getWorld->size() = "<<(*planning_scene_)->getWorld()->size()<<std::endl;
+
 
     if(!get_obs_client_->wait_for_service(std::chrono::milliseconds(500))){
       RCLCPP_ERROR(logger,
@@ -88,17 +95,18 @@ public:
 
     if(get_obs_future.wait_for(std::chrono::milliseconds(500)) != std::future_status::timeout)
     {
-      std::vector<shapes::ShapeConstPtr> shapes;
-      EigenSTL::vector_Isometry3d shape_poses;
 
       for(const auto& obs : get_obs_future.get()->obstacles_list){
+        std::vector<shapes::ShapeConstPtr> shapes;
+        EigenSTL::vector_Isometry3d shape_poses;
+
         if(!shapesAndPosesFromObstacles(obs, shapes, shape_poses)){
           RCLCPP_ERROR(logger, "'%s' add obstacles failed!", robot_name_.c_str());
           return false;
         }
         const Eigen::Isometry3d& world_to_object_header_transform = 
           planning_scene->getFrameTransform(obs.header.frame_id);
-        (*world_)->addToObject(
+        world->addToObject(
           obs.name, world_to_object_header_transform, shapes, shape_poses);
       }
     }else{
@@ -112,8 +120,71 @@ public:
       "Xx=Xx=Xx=Xx=Xx=Xx= '%s' adapt time = %f, copy time = %f, =xX=xX=xX=xX=xX=xX", 
       robot_name_.c_str(), (t_end - t_start).seconds(), (t_copy - t_start).seconds());
 
+    // (*planning_scene_)->allocateCollisionDetector(collision_detection::CollisionDetectorAllocatorFCL::create());
+    
     if(!planner(*planning_scene_, req, res)){
       return false;
+    }
+
+    std::cout<<"getCollisionDetectorName() = "<<(*planning_scene_)->getCollisionDetectorName()<<std::endl;
+    std::cout<<"getCollisionDetectorName() = "<<planning_scene->getCollisionDetectorName()<<std::endl;
+    std::cout<<"isStateColliding = "<<(*planning_scene_)->isStateColliding((*planning_scene_)->getCurrentState(), "ur_manipulator", true)<<std::endl;
+    std::cout<<"isStateColliding = "<<planning_scene->isStateColliding(planning_scene->getCurrentState(), "ur_manipulator", true)<<std::endl;
+    std::cout<<"world->size() = "<<world->size()<<std::endl;
+    std::cout<<"planning_scene->getWorld()->size() = "<<planning_scene->getWorld()->size()<<std::endl;
+    std::cout<<"(*planning_scene_)->getWorld->size() = "<<(*planning_scene_)->getWorld()->size()<<std::endl;
+    auto obj_ids = (*planning_scene_)->getWorld()->getObjectIds();
+    for(const auto& obj_id : obj_ids)
+    {
+      const auto& obj = *((*planning_scene_)->getWorld()->getObject(obj_id));
+      std::cout<<obj.id_<<std::endl;
+      Eigen::Matrix3d m = obj.pose_.rotation();
+      Eigen::Vector3d v = obj.pose_.translation();
+      std::cout << "Rotation: " << std::endl << m << std::endl;
+      std::cout << "Translation: " << std::endl << v << std::endl;
+      for(auto x : obj.shape_poses_)
+      {
+        m = x.rotation();
+        v = x.translation();
+        std::cout << "Rotation: " << std::endl << m << std::endl;
+        std::cout << "Translation: " << std::endl << v << std::endl;
+      }
+      for(auto [a, x] : obj.subframe_poses_)
+      {
+        m = x.rotation();
+        v = x.translation();
+        std::cout << "Rotation: " << std::endl << m << std::endl;
+        std::cout << "Translation: " << std::endl << v << std::endl;
+      }
+      std::cout<<"getObjectType(obj_id) = "<<(*planning_scene_)->getObjectType(obj_id).key<<", "<<(*planning_scene_)->getObjectType(obj_id).db<<std::endl;
+      // world_out->addToObject(obj.id_, obj.pose_, obj.shapes_, obj.shape_poses_);
+      // world_out->setSubframesOfObject(obj.id_, obj.subframe_poses_);
+    }
+    std::cout<<"---------"<<std::endl;
+    obj_ids = planning_scene->getWorld()->getObjectIds();
+    for(const auto& obj_id : obj_ids)
+    {
+      const auto& obj = *(planning_scene->getWorld()->getObject(obj_id));
+      std::cout<<obj.id_<<std::endl;
+      Eigen::Matrix3d m = obj.pose_.rotation();
+      Eigen::Vector3d v = obj.pose_.translation();
+      std::cout << "Rotation: " << std::endl << m << std::endl;
+      std::cout << "Translation: " << std::endl << v << std::endl;
+      for(auto x : obj.shape_poses_)
+      {
+        m = x.rotation();
+        v = x.translation();
+        std::cout << "Rotation: " << std::endl << m << std::endl;
+        std::cout << "Translation: " << std::endl << v << std::endl;
+      }
+      for(auto [a, x] : obj.subframe_poses_)
+      {
+        m = x.rotation();
+        v = x.translation();
+        std::cout << "Rotation: " << std::endl << m << std::endl;
+        std::cout << "Translation: " << std::endl << v << std::endl;
+      }
+      std::cout<<"getObjectType(obj_id) = "<<planning_scene->getObjectType(obj_id).key<<", "<<planning_scene->getObjectType(obj_id).db<<std::endl;
     }
 
     moveit_msgs::msg::MotionPlanResponse res_msg;
@@ -140,6 +211,53 @@ public:
     return set_traj_future.get()->success;
   }
 
+  void copyPlanningScene(const planning_scene::PlanningSceneConstPtr& scene_in,
+                  planning_scene::PlanningScenePtr& scene_out) const
+  {
+    const auto& world_in = scene_in->getWorld();
+    const auto& world_out = scene_out->getWorldNonConst();
+    const auto& state_in = scene_in->getCurrentState();
+    const auto& obj_ids = world_in->getObjectIds();
+
+    scene_out->allocateCollisionDetector(collision_detection::CollisionDetectorAllocatorFCL::create());
+
+    scene_out->getCurrentStateNonConst() = state_in;
+    scene_out->getTransformsNonConst().setAllTransforms(
+      scene_in->getTransforms().getAllTransforms());
+    scene_out->getAllowedCollisionMatrixNonConst() = scene_in->getAllowedCollisionMatrix();
+
+    collision_detection::CollisionEnvConstPtr cenv_in = scene_in->getCollisionEnv();
+    collision_detection::CollisionEnvPtr cenv_out = scene_out->getCollisionEnvNonConst();
+    cenv_out->setLinkScale(cenv_in->getLinkScale());
+    cenv_out->setLinkPadding(cenv_in->getLinkPadding());
+
+    scene_out->setCollisionObjectUpdateCallback(
+      [](const collision_detection::World::ObjectConstPtr&, 
+             collision_detection::World::Action){ return; });
+    // scene_out->setAttachedBodyUpdateCallback(moveit::core::AttachedBodyCallback());
+
+    std::vector<const moveit::core::AttachedBody*> attached_objs;
+    state_in.getAttachedBodies(attached_objs);
+
+    for (const moveit::core::AttachedBody* attached_obj : attached_objs)
+    {
+      if(scene_in->hasObjectType(attached_obj->getName())){
+        scene_out->setObjectType(attached_obj->getName(), 
+          scene_in->getObjectType(attached_obj->getName()));
+      }
+    }
+
+    for(const auto& obj_id : obj_ids)
+    {
+      const auto& obj = *(world_in->getObject(obj_id));
+      world_out->addToObject(obj.id_, obj.pose_, obj.shapes_, obj.shape_poses_);
+      world_out->setSubframesOfObject(obj.id_, obj.subframe_poses_);
+      if(scene_in->hasObjectType(obj_id)){
+        scene_out->setObjectType(obj_id, scene_in->getObjectType(obj_id));
+      }
+    }
+  }
+
   bool shapesAndPosesFromObstacles(const mr_msgs::msg::Obstacles& obs, 
                     std::vector<shapes::ShapeConstPtr>& shapes,
                     EigenSTL::vector_Isometry3d& shape_poses) const
@@ -151,9 +269,7 @@ public:
     }
 
     const size_t num_shapes = obs.primitives.size() + obs.meshes.size();
-    shapes.clear();
     shapes.reserve(num_shapes);
-    shape_poses.clear();
     shape_poses.reserve(num_shapes);
 
     const auto& pose_msg_to_eigen = [](const mr_msgs::msg::Pose& msg)
@@ -171,13 +287,13 @@ public:
     };
 
     auto append = [&shapes, &shape_poses, &pose_msg_to_eigen](
-      shapes::Shape* s, const mr_msgs::msg::Poses& poses_msg){
+      shapes::ShapeConstPtr s, const mr_msgs::msg::Poses& poses_msg){
       if (!s)
         return;
       for(const auto& pose_msg : poses_msg.poses)
       {
         shape_poses.emplace_back(std::move(pose_msg_to_eigen(pose_msg)));
-        shapes.emplace_back(shapes::ShapeConstPtr(s));
+        shapes.emplace_back(s);
       }
     };
 
@@ -188,7 +304,8 @@ public:
         return false;
       }
       for(size_t i=0; i<shape_vector.size(); i++){
-        append(shapes::constructShapeFromMsg(shape_vector[i]), shape_poses_msg[i]);
+        append(shapes::ShapeConstPtr(shapes::constructShapeFromMsg(
+          shape_vector[i])), shape_poses_msg[i]);
       }
       return true;
     };
@@ -218,7 +335,6 @@ public:
     set_traj_client_ = this_node_->create_client<
       mr_msgs::srv::SetPlannedTrajectory>(set_traj_service_name);
 
-    world_ = new std::shared_ptr<collision_detection::World>;
     planning_scene_ = new std::shared_ptr<planning_scene::PlanningScene>;
 
     this_node_thread_ = std::thread([this](){rclcpp::spin(this_node_);});
@@ -229,7 +345,6 @@ public:
 
   ~AddTrajectoryObstacles() override
   {
-    delete world_;
     delete planning_scene_;
   }
 
@@ -237,7 +352,6 @@ protected:
   std::string robot_name_;
   std::thread this_node_thread_;
   rclcpp::Node::SharedPtr this_node_;
-  std::shared_ptr<collision_detection::World>* world_;
   std::shared_ptr<planning_scene::PlanningScene>* planning_scene_;
   rclcpp::Client<mr_msgs::srv::SetPlannedTrajectory>::SharedPtr set_traj_client_;
   rclcpp::Client<mr_msgs::srv::GetRobotTrajectoryObstacle>::SharedPtr get_obs_client_;

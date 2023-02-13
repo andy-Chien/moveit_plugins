@@ -27,6 +27,7 @@ public:
     Robot(std::shared_ptr<rclcpp::Node> node, std::string robot_name)
     : node_(node), robot_name_(robot_name)
     {
+      obstacles.name = robot_name + "_trajectory_obstacles";
       load_robot(robot_name);
 
       jnt_states_sub_ = node->create_subscription<sensor_msgs::msg::JointState>(
