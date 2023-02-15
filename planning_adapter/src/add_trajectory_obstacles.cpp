@@ -73,22 +73,28 @@ public:
     {
       *planning_scene_ = std::make_shared<planning_scene::PlanningScene>(
         planning_scene->getRobotModel());
-      copyPlanningScene(planning_scene, *planning_scene_);
     }
+    copyPlanningScene(planning_scene, *planning_scene_);
     (*planning_scene_)->setCurrentState(planning_scene->getCurrentState());
     const collision_detection::WorldPtr& world = (*planning_scene_)->getWorldNonConst();
-    *world = collision_detection::World(*(planning_scene->getWorld()));
+    // *world = collision_detection::World(*(planning_scene->getWorld()));
     rclcpp::Time t_copy = this_node_->now();
     std::cout<<"============================================================================="<<std::endl;
     std::cout<<"world->size() = "<<world->size()<<std::endl;
     std::cout<<"planning_scene->getWorld()->size() = "<<planning_scene->getWorld()->size()<<std::endl;
     std::cout<<"(*planning_scene_)->getWorld->size() = "<<(*planning_scene_)->getWorld()->size()<<std::endl;
 
+    const auto& clear_and_return = [&world](bool result){
+      world->clearObjects();
+      return result;
+    };
+
+
 
     if(!get_obs_client_->wait_for_service(std::chrono::milliseconds(500))){
       RCLCPP_ERROR(logger,
         "'%s' wait for service '%s' failed!", robot_name_.c_str(), get_obs_service_name.c_str());
-      return false;
+      return clear_and_return(false);
     }
     std::shared_future<std::shared_ptr<mr_msgs::srv::GetRobotTrajectoryObstacle_Response>> 
       get_obs_future = get_obs_client_->async_send_request(obs_req).future.share();
@@ -102,7 +108,7 @@ public:
 
         if(!shapesAndPosesFromObstacles(obs, shapes, shape_poses)){
           RCLCPP_ERROR(logger, "'%s' add obstacles failed!", robot_name_.c_str());
-          return false;
+          return clear_and_return(false);
         }
         const Eigen::Isometry3d& world_to_object_header_transform = 
           planning_scene->getFrameTransform(obs.header.frame_id);
@@ -112,7 +118,7 @@ public:
     }else{
       RCLCPP_ERROR(logger, 
         "'%s' service '%s' time out!", robot_name_.c_str(), get_obs_service_name.c_str());
-      return false;
+      return clear_and_return(false);
     }
 
     rclcpp::Time t_end = this_node_->now();
@@ -123,7 +129,7 @@ public:
     // (*planning_scene_)->allocateCollisionDetector(collision_detection::CollisionDetectorAllocatorFCL::create());
     
     if(!planner(*planning_scene_, req, res)){
-      return false;
+      return clear_and_return(false);
     }
 
     std::cout<<"getCollisionDetectorName() = "<<(*planning_scene_)->getCollisionDetectorName()<<std::endl;
@@ -197,7 +203,7 @@ public:
       RCLCPP_ERROR(logger,
         "'%s' wait for service '%s' failed!", robot_name_.c_str(), set_traj_service_name.c_str());
       res.error_code_.val = moveit_msgs::msg::MoveItErrorCodes::FAILURE;
-      return false;
+      return clear_and_return(false);
     }
     std::shared_future<std::shared_ptr<mr_msgs::srv::SetPlannedTrajectory_Response>> 
       set_traj_future = set_traj_client_->async_send_request(traj_req).future.share();
@@ -208,7 +214,7 @@ public:
     if(!set_traj_future.get()->success){
       RCLCPP_ERROR(logger, "'%s' set planned trajectory failed!", robot_name_.c_str());
     }
-    return set_traj_future.get()->success;
+    return clear_and_return(set_traj_future.get()->success);
   }
 
   void copyPlanningScene(const planning_scene::PlanningSceneConstPtr& scene_in,
