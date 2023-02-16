@@ -24,8 +24,8 @@ public:
   class Robot
   {
   public:
-    Robot(std::shared_ptr<rclcpp::Node> node, std::string robot_name)
-    : node_(node), robot_name_(robot_name)
+    Robot(std::shared_ptr<rclcpp::Node> node, std::string robot_name, double padding)
+    : node_(node), robot_name_(robot_name), padding_(padding)
     {
       obstacles.name = robot_name + "_trajectory_obstacles";
       load_robot(robot_name);
@@ -73,6 +73,8 @@ public:
 
     std::shared_ptr<rclcpp::Node> node_;
     std::string robot_name_;
+    double padding_;
+    
     std::vector<double> jnt_pos_;
     std::vector<std::string> jnt_names_;
     rclcpp::AsyncParametersClient::SharedPtr param_client_;

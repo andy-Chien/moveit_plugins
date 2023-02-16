@@ -7,6 +7,14 @@ scene_buffer:
       not_empty<>: []
     }
   }
+  padding: {
+    type: double,
+    default_value: 0.0,
+    description: "padding for the trajectory obstacles",
+    validation: {
+      gt_eq<>: [ 0.0 ]
+    }
+  }
   collision_maps:
     __map_robot_names: 
       collision_robots: {

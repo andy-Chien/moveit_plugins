@@ -22,7 +22,7 @@ void SceneBuffer::init()
   rclcpp::SubscriptionOptions options;
   for(const auto& robot_name : params_.robot_names)
   {
-    auto robot = std::make_shared<Robot>(shared_from_this(), robot_name);
+    auto robot = std::make_shared<Robot>(shared_from_this(), robot_name, params_.padding);
     robots_.insert(std::pair<std::string, std::shared_ptr<Robot>>(
       robot_name, robot)
     );
@@ -54,8 +54,8 @@ void SceneBuffer::Robot::load_robot(const std::string& urdf, const std::string& 
   std::cout<<"XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX"<<std::endl;
   std::cout<<srdf<<std::endl;
 
-  std::vector<Eigen::Isometry3d> link_poses;
-  std::vector<std::vector<Eigen::Isometry3d>> link_poses_;
+  // std::vector<Eigen::Isometry3d> link_poses;
+  // std::vector<std::vector<Eigen::Isometry3d>> link_poses_;
 
   robot_model_loader::RobotModelLoader rml(
     node_, robot_model_loader::RobotModelLoader::Options(urdf, srdf));
@@ -67,54 +67,54 @@ void SceneBuffer::Robot::load_robot(const std::string& urdf, const std::string& 
   model->printModelInfo(std::cout);
   std::cout<<"ddddddddddddddddddddddddddddddddddddddddddddddddddd"<<std::endl;
   state->printTransforms();
-  double ang = -0.1;
-  state->setJointPositions("shoulder_lift_joint", &ang);
-  state->update();
-  {
-    std::cout<<"BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB"<<std::endl;
-    const auto& links = model->getLinkModels();
-    for(const auto& link : links)
-    {
-      const auto& shap = link->getShapes();
-      std::cout << "shap size = " << shap.size() << std::endl;
-      const auto& trans = state->getGlobalLinkTransform(link);
-      const Eigen::Matrix3d& m = trans.rotation();
-      const Eigen::Vector3d& v = trans.translation();
-      std::cout << "Rotation: " << std::endl << m << std::endl;
-      std::cout << "Translation: " << std::endl << v << std::endl;
-      link_poses.push_back(trans);
-    }
-    link_poses_.push_back(link_poses);
-    link_poses.clear();
-    std::cout<<"BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB"<<std::endl;
-  }
-  std::cout<<"eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"<<std::endl;
-  state->printTransforms();
-  ang = 0.1;
-  state->setJointPositions("shoulder_lift_joint", &ang);
-  state->update();
-  std::cout<<"ffffffffffffffffffffffffffffffffffffffffffffffffffff"<<std::endl;
-  state->printTransforms();
+  // double ang = -0.1;
+  // state->setJointPositions("shoulder_lift_joint", &ang);
+  // state->update();
+  // {
+  //   std::cout<<"BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB"<<std::endl;
+  //   const auto& links = model->getLinkModels();
+  //   for(const auto& link : links)
+  //   {
+  //     const auto& shap = link->getShapes();
+  //     std::cout << "shap size = " << shap.size() << std::endl;
+  //     const auto& trans = state->getGlobalLinkTransform(link);
+  //     const Eigen::Matrix3d& m = trans.rotation();
+  //     const Eigen::Vector3d& v = trans.translation();
+  //     std::cout << "Rotation: " << std::endl << m << std::endl;
+  //     std::cout << "Translation: " << std::endl << v << std::endl;
+  //     link_poses.push_back(trans);
+  //   }
+  //   link_poses_.push_back(link_poses);
+  //   link_poses.clear();
+  //   std::cout<<"BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB"<<std::endl;
+  // }
+  // std::cout<<"eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"<<std::endl;
+  // state->printTransforms();
+  // ang = 0.1;
+  // state->setJointPositions("shoulder_lift_joint", &ang);
+  // state->update();
+  // std::cout<<"ffffffffffffffffffffffffffffffffffffffffffffffffffff"<<std::endl;
+  // state->printTransforms();
 
-  {
-    std::cout<<"DDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD"<<std::endl;
-    const auto links = model->getLinkModels();
-    for(const auto link : links)
-    {
-      const auto& shap = link->getShapes();
-      std::cout << "shap size = " << shap.size() << std::endl;
-      const auto& trans = state->getGlobalLinkTransform(link);
-      const Eigen::Matrix3d& m = trans.rotation();
-      const Eigen::Vector3d& v = trans.translation();
-      std::cout << "Rotation: " << std::endl << m << std::endl;
-      std::cout << "Translation: " << std::endl << v << std::endl;
-      link_poses.push_back(trans);
-    }
-    link_poses_.push_back(link_poses);
-    link_poses.clear();
-    std::cout<<"DDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD"<<std::endl;
-  }
-  std::cout<<"size of link_poses = "<<link_poses_.size()<<" x "<<link_poses_[0].size()<<std::endl;
+  // {
+  //   std::cout<<"DDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD"<<std::endl;
+  //   const auto links = model->getLinkModels();
+  //   for(const auto link : links)
+  //   {
+  //     const auto& shap = link->getShapes();
+  //     std::cout << "shap size = " << shap.size() << std::endl;
+  //     const auto& trans = state->getGlobalLinkTransform(link);
+  //     const Eigen::Matrix3d& m = trans.rotation();
+  //     const Eigen::Vector3d& v = trans.translation();
+  //     std::cout << "Rotation: " << std::endl << m << std::endl;
+  //     std::cout << "Translation: " << std::endl << v << std::endl;
+  //     link_poses.push_back(trans);
+  //   }
+  //   link_poses_.push_back(link_poses);
+  //   link_poses.clear();
+  //   std::cout<<"DDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD"<<std::endl;
+  // }
+  // std::cout<<"size of link_poses = "<<link_poses_.size()<<" x "<<link_poses_[0].size()<<std::endl;
 
   for(const auto& link : model->getLinkModels())
   {
@@ -268,21 +268,23 @@ bool SceneBuffer::Robot::obstacles_from_links()
   obstacles.meshes.reserve(mesh_links.size());
   obstacles.primitives.reserve(prim_links.size());
 
-  const auto&& mesh_msg_from_shape = [&](const shapes::Mesh* mesh){
+  const auto&& mesh_msg_from_shape = [&](const shapes::Mesh* mesh_in){
+    auto mesh = *mesh_in;
+    mesh.padd(padding_);
     shape_msgs::msg::Mesh mesh_msg;
-    mesh_msg.triangles.resize(mesh->triangle_count);
-    mesh_msg.vertices.resize(mesh->vertex_count);
+    mesh_msg.triangles.resize(mesh.triangle_count);
+    mesh_msg.vertices.resize(mesh.vertex_count);
 
-    for(size_t i=0; i < mesh->triangle_count; i++){
-      mesh_msg.triangles[i].vertex_indices[0] = mesh->triangles[3 * i];
-      mesh_msg.triangles[i].vertex_indices[1] = mesh->triangles[3 * i + 1];
-      mesh_msg.triangles[i].vertex_indices[2] = mesh->triangles[3 * i + 2];
+    for(size_t i=0; i < mesh.triangle_count; i++){
+      mesh_msg.triangles[i].vertex_indices[0] = mesh.triangles[3 * i];
+      mesh_msg.triangles[i].vertex_indices[1] = mesh.triangles[3 * i + 1];
+      mesh_msg.triangles[i].vertex_indices[2] = mesh.triangles[3 * i + 2];
     }
-    for(size_t i=0; i < mesh->vertex_count; i++)
+    for(size_t i=0; i < mesh.vertex_count; i++)
     {
-      mesh_msg.vertices[i].x = mesh->vertices[3 * i];
-      mesh_msg.vertices[i].y = mesh->vertices[3 * i + 1];
-      mesh_msg.vertices[i].z = mesh->vertices[3 * i + 2];
+      mesh_msg.vertices[i].x = mesh.vertices[3 * i];
+      mesh_msg.vertices[i].y = mesh.vertices[3 * i + 1];
+      mesh_msg.vertices[i].z = mesh.vertices[3 * i + 2];
     }
     return mesh_msg;
   };
@@ -294,38 +296,42 @@ bool SceneBuffer::Robot::obstacles_from_links()
     {
     case shapes::BOX:
     {
-      const auto box = static_cast<const shapes::Box*>(shape.get());
+      auto box = *static_cast<const shapes::Box*>(shape.get());
+      box.padd(padding_);
       msg.type = shape_msgs::msg::SolidPrimitive::BOX;
       msg.dimensions.resize(3);
-      msg.dimensions[0] = box->size[0];
-      msg.dimensions[1] = box->size[1];
-      msg.dimensions[2] = box->size[2];
+      msg.dimensions[0] = box.size[0];
+      msg.dimensions[1] = box.size[1];
+      msg.dimensions[2] = box.size[2];
       break;
     }
     case shapes::SPHERE:
     {
-      const auto sphere = static_cast<const shapes::Sphere*>(shape.get());
+      auto sphere = *static_cast<const shapes::Sphere*>(shape.get());
+      sphere.padd(padding_);
       msg.type = shape_msgs::msg::SolidPrimitive::SPHERE;
       msg.dimensions.resize(1);
-      msg.dimensions[0] = sphere->radius;
+      msg.dimensions[0] = sphere.radius;
       break;
     }
     case shapes::CYLINDER:
     {
-      const auto cylinder = static_cast<const shapes::Cylinder*>(shape.get());
+      auto cylinder = *static_cast<const shapes::Cylinder*>(shape.get());
+      cylinder.padd(padding_);
       msg.type = shape_msgs::msg::SolidPrimitive::CYLINDER;
       msg.dimensions.resize(2);
-      msg.dimensions[1] = cylinder->length;
-      msg.dimensions[0] = cylinder->radius;
+      msg.dimensions[1] = cylinder.length;
+      msg.dimensions[0] = cylinder.radius;
       break;
     }
     case shapes::CONE:
     {
-      const auto cone = static_cast<const shapes::Cone*>(shape.get());
+      auto cone = *static_cast<const shapes::Cone*>(shape.get());
+      cone.padd(padding_);
       msg.type = shape_msgs::msg::SolidPrimitive::CONE;
       msg.dimensions.resize(2);
-      msg.dimensions[1] = cone->length;
-      msg.dimensions[0] = cone->radius;
+      msg.dimensions[1] = cone.length;
+      msg.dimensions[0] = cone.radius;
       break;
     }
     default:

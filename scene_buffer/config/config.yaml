@@ -3,6 +3,8 @@ scene_buffer:
     robot_names:
       - robot_1
       - robot_2
+    
+    padding: 0.05
 
     collision_maps:
       robot_1:
