@@ -45,6 +45,7 @@
 #include <ompl/tools/benchmark/Benchmark.h>
 #include <ompl/tools/multiplan/ParallelPlan.h>
 #include <ompl/base/StateStorage.h>
+#include <ompl/base/spaces/constraint/ConstrainedStateSpace.h>
 
 namespace ompl_interface
 {
@@ -69,6 +70,19 @@ struct ModelBasedPlanningContextSpecification
 
   ModelBasedStateSpacePtr state_space_;
   og::SimpleSetupPtr ompl_simple_setup_;  // pass in the correct simple setup type
+
+  /** \brief OMPL constrained state space to handle path constraints.
+   *
+   * When the parameter "use_ompl_constrained_planning" is set to true in ompl_planning.yaml,
+   * the path constraints are handled by this state space.
+   *
+   * **Important**: because code often depents on the attribute `state_space_` to copy states from MoveIt to OMPL, we
+   * must set `state_space_` to have type `ompl_interface::ConstrainedPlanningStateSpace`. The actual planning does
+   * not happen with this `state_space_`, but it is used to create the `constrained_state_space_` of type
+   * `ompl::base::ConstrainedStateSpace`. The latter is the one passed to OMPL simple setup (after creating a
+   * ConstrainedSpaceInformation object from it).
+   * */
+  ob::ConstrainedStateSpacePtr constrained_state_space_;
 };
 
 class ModelBasedPlanningContext : public planning_interface::PlanningContext
@@ -231,13 +245,15 @@ public:
 
   void setProjectionEvaluator(const std::string& peval);
 
-  void setPlanningVolume(const moveit_msgs::WorkspaceParameters& wparams);
+  void setPlanningVolume(const moveit_msgs::msg::WorkspaceParameters& wparams);
 
   void setCompleteInitialState(const moveit::core::RobotState& complete_initial_robot_state);
 
-  bool setGoalConstraints(const std::vector<moveit_msgs::Constraints>& goal_constraints,
-                          const moveit_msgs::Constraints& path_constraints, moveit_msgs::MoveItErrorCodes* error);
-  bool setPathConstraints(const moveit_msgs::Constraints& path_constraints, moveit_msgs::MoveItErrorCodes* error);
+  bool setGoalConstraints(const std::vector<moveit_msgs::msg::Constraints>& goal_constraints,
+                          const moveit_msgs::msg::Constraints& path_constraints,
+                          moveit_msgs::msg::MoveItErrorCodes* error);
+  bool setPathConstraints(const moveit_msgs::msg::Constraints& path_constraints,
+                          moveit_msgs::msg::MoveItErrorCodes* error);
 
   void setConstraintsApproximations(const ConstraintsLibraryPtr& constraints_library)
   {
@@ -278,7 +294,7 @@ public:
      @param timeout The time to spend on solving
      @param count The number of runs to combine the paths of, in an attempt to generate better quality paths
   */
-  bool solve(double timeout, unsigned int count);
+  const moveit_msgs::msg::MoveItErrorCodes solve(double timeout, unsigned int count);
 
   /* @brief Benchmark the planning problem. Return true on successful saving of benchmark results
      @param timeout The time to spend on solving
@@ -314,20 +330,20 @@ public:
 
   /** @brief Look up param server 'constraint_approximations' and use its value as the path to load constraint
    * approximations to */
-  bool loadConstraintApproximations(const ros::NodeHandle& nh);
+  bool loadConstraintApproximations(const rclcpp::Node::SharedPtr& node);
 
   /** @brief Look up param server 'constraint_approximations' and use its value as the path to save constraint
    * approximations to */
-  bool saveConstraintApproximations(const ros::NodeHandle& nh);
+  bool saveConstraintApproximations(const rclcpp::Node::SharedPtr& node);
 
   /** \brief Configure ompl_simple_setup_ and optionally the constraints_library_.
    *
    * ompl_simple_setup_ gets a start state, state sampler, and state validity checker.
    *
-   * \param nh ROS node handle used to load the constraint approximations.
+   * \param node ROS node used to load the constraint approximations.
    * \param use_constraints_approximations Set to true if we want to load the constraint approximation.
    * */
-  virtual void configure(const ros::NodeHandle& nh, bool use_constraints_approximations);
+  virtual void configure(const rclcpp::Node::SharedPtr& node, bool use_constraints_approximations);
 
 protected:
   void preSolve();
@@ -372,6 +388,9 @@ protected:
   void registerTerminationCondition(const ob::PlannerTerminationCondition& ptc);
   void unregisterTerminationCondition();
 
+  /** \brief Convert OMPL PlannerStatus to moveit_msgs::msg::MoveItErrorCode */
+  int32_t logPlannerStatus(og::SimpleSetupPtr ompl_simple_setup);
+
   ModelBasedPlanningContextSpecification spec_;
 
   moveit::core::RobotState complete_initial_robot_state_;
@@ -388,7 +407,7 @@ protected:
   std::vector<int> space_signature_;
 
   kinematic_constraints::KinematicConstraintSetPtr path_constraints_;
-  moveit_msgs::Constraints path_constraints_msg_;
+  moveit_msgs::msg::Constraints path_constraints_msg_;
   std::vector<kinematic_constraints::KinematicConstraintSetPtr> goal_constraints_;
 
   const ob::PlannerTerminationCondition* ptc_;

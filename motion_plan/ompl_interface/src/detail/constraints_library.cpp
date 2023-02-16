@@ -35,17 +35,17 @@
 /* Author: Ioan Sucan */
 
 #include <boost/date_time/posix_time/posix_time.hpp>
-#include <boost/filesystem.hpp>
+#include <filesystem>
 #include <fstream>
 #include <moveit/ompl_interface/detail/constrained_sampler.h>
 #include <moveit/ompl_interface/detail/constraints_library.h>
-#include <moveit/profiler/profiler.h>
+
 #include <ompl/tools/config/SelfConfig.h>
 #include <utility>
 
 namespace ompl_interface
 {
-constexpr char LOGNAME[] = "constraints_library";
+static const rclcpp::Logger LOGGER = rclcpp::get_logger("moveit.ompl_planning.constraints_library");
 
 namespace
 {
@@ -53,16 +53,22 @@ template <typename T>
 void msgToHex(const T& msg, std::string& hex)
 {
   static const char SYMBOL[] = { '0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'A', 'B', 'C', 'D', 'E', 'F' };
-  const size_t serial_size_arg = ros::serialization::serializationLength(msg);
+  auto type_support = rosidl_typesupport_cpp::get_message_type_support_handle<T>();
+  rmw_serialized_message_t serialized_msg;
+  rmw_ret_t result = rmw_serialize(&msg, type_support, &serialized_msg);
+  if (result != RMW_RET_OK)
+  {
+    // TODO(henningkayser): handle error
+    RCLCPP_ERROR(LOGGER, "Failed to serialize message!");
+    return;
+  }
+  const size_t serial_size_arg = serialized_msg.buffer_length;
 
-  boost::shared_array<uint8_t> buffer_arg(new uint8_t[serial_size_arg]);
-  ros::serialization::OStream stream_arg(buffer_arg.get(), serial_size_arg);
-  ros::serialization::serialize(stream_arg, msg);
   hex.resize(serial_size_arg * 2);
   for (std::size_t i = 0; i < serial_size_arg; ++i)
   {
-    hex[i * 2] = SYMBOL[buffer_arg[i] / 16];
-    hex[i * 2 + 1] = SYMBOL[buffer_arg[i] % 16];
+    hex[i * 2] = SYMBOL[serialized_msg.buffer[i] / 16];
+    hex[i * 2 + 1] = SYMBOL[serialized_msg.buffer[i] % 16];
   }
 }
 
@@ -70,14 +76,28 @@ template <typename T>
 void hexToMsg(const std::string& hex, T& msg)
 {
   const size_t serial_size_arg = hex.length() / 2;
-  boost::shared_array<uint8_t> buffer_arg(new uint8_t[serial_size_arg]);
+  rmw_serialized_message_t serialized_msg = rcutils_get_zero_initialized_uint8_array();
+  rcutils_ret_t rcutils_result = rcutils_uint8_array_resize(&serialized_msg, serial_size_arg);
+  if (rcutils_result != RCUTILS_RET_OK)
+  {
+    // TODO(henningkayser): handle error
+    RCLCPP_ERROR(LOGGER, "Failed to allocate message buffer!");
+    return;
+  }
+
   for (std::size_t i = 0; i < serial_size_arg; ++i)
   {
-    buffer_arg[i] = (hex[i * 2] <= '9' ? (hex[i * 2] - '0') : (hex[i * 2] - 'A' + 10)) * 16 +
-                    (hex[i * 2 + 1] <= '9' ? (hex[i * 2 + 1] - '0') : (hex[i * 2 + 1] - 'A' + 10));
+    serialized_msg.buffer[i] = (hex[i * 2] <= '9' ? (hex[i * 2] - '0') : (hex[i * 2] - 'A' + 10)) * 16 +
+                               (hex[i * 2 + 1] <= '9' ? (hex[i * 2 + 1] - '0') : (hex[i * 2 + 1] - 'A' + 10));
   }
-  ros::serialization::IStream stream_arg(buffer_arg.get(), serial_size_arg);
-  ros::serialization::deserialize(stream_arg, msg);
+  auto type_support = rosidl_typesupport_cpp::get_message_type_support_handle<T>();
+  rmw_ret_t result = rmw_deserialize(&serialized_msg, type_support, &msg);
+  if (result != RMW_RET_OK)
+  {
+    // TODO(henningkayser): handle error
+    RCLCPP_ERROR(LOGGER, "Failed to deserialize message!");
+    return;
+  }
 }
 }  // namespace
 
@@ -184,8 +204,10 @@ bool interpolateUsingStoredStates(const ConstraintApproximationStateStorage* sta
 ompl_interface::InterpolationFunction ompl_interface::ConstraintApproximation::getInterpolationFunction() const
 {
   if (explicit_motions_ && milestones_ > 0 && milestones_ < state_storage_->size())
-    return std::bind(&interpolateUsingStoredStates, state_storage_, std::placeholders::_1, std::placeholders::_2,
-                     std::placeholders::_3, std::placeholders::_4);
+    return
+        [this](const ompl::base::State* from, const ompl::base::State* to, const double t, ompl::base::State* state) {
+          return interpolateUsingStoredStates(state_storage_, from, to, t, state);
+        };
   return InterpolationFunction();
 }
 
@@ -199,13 +221,14 @@ allocConstraintApproximationStateSampler(const ob::StateSpace* space, const std:
   if (sig != expected_signature)
     return ompl::base::StateSamplerPtr();
   else
-    return ompl::base::StateSamplerPtr(new ConstraintApproximationStateSampler(space, state_storage, milestones));
+    return std::make_shared<ConstraintApproximationStateSampler>(space, state_storage, milestones);
 }
 }  // namespace ompl_interface
 
 ompl_interface::ConstraintApproximation::ConstraintApproximation(
-    std::string group, std::string state_space_parameterization, bool explicit_motions, moveit_msgs::Constraints msg,
-    std::string filename, ompl::base::StateStoragePtr storage, std::size_t milestones)
+    std::string group, std::string state_space_parameterization, bool explicit_motions,
+    moveit_msgs::msg::Constraints msg, std::string filename, ompl::base::StateStoragePtr storage,
+    std::size_t milestones)
   : group_(std::move(group))
   , state_space_parameterization_(std::move(state_space_parameterization))
   , explicit_motions_(explicit_motions)
@@ -221,12 +244,13 @@ ompl_interface::ConstraintApproximation::ConstraintApproximation(
 }
 
 ompl::base::StateSamplerAllocator
-ompl_interface::ConstraintApproximation::getStateSamplerAllocator(const moveit_msgs::Constraints& /*unused*/) const
+ompl_interface::ConstraintApproximation::getStateSamplerAllocator(const moveit_msgs::msg::Constraints& /*unused*/) const
 {
   if (state_storage_->size() == 0)
     return ompl::base::StateSamplerAllocator();
-  return std::bind(&allocConstraintApproximationStateSampler, std::placeholders::_1, space_signature_, state_storage_,
-                   milestones_);
+  return [this](const ompl::base::StateSpace* ss) {
+    return allocConstraintApproximationStateSampler(ss, space_signature_, state_storage_, milestones_);
+  };
 }
 /*
 void ompl_interface::ConstraintApproximation::visualizeDistribution(const
@@ -277,14 +301,14 @@ void ompl_interface::ConstraintsLibrary::loadConstraintApproximations(const std:
   std::ifstream fin((path + "/manifest").c_str());
   if (!fin.good())
   {
-    ROS_WARN_NAMED(LOGNAME,
-                   "Manifest not found in folder '%s'. Not loading "
-                   "constraint approximations.",
-                   path.c_str());
+    RCLCPP_WARN(LOGGER,
+                "Manifest not found in folder '%s'. Not loading "
+                "constraint approximations.",
+                path.c_str());
     return;
   }
 
-  ROS_INFO_NAMED(LOGNAME, "Loading constrained space approximations from '%s'...", path.c_str());
+  RCLCPP_INFO(LOGGER, "Loading constrained space approximations from '%s'...", path.c_str());
 
   while (fin.good() && !fin.eof())
   {
@@ -311,47 +335,41 @@ void ompl_interface::ConstraintsLibrary::loadConstraintApproximations(const std:
     if (context_->getGroupName() != group &&
         context_->getOMPLStateSpace()->getParameterizationType() != state_space_parameterization)
     {
-      ROS_INFO_NAMED(LOGNAME,
-                     "Ignoring constraint approximation of type '%s' "
-                     "for group '%s' from '%s'...",
-                     state_space_parameterization.c_str(), group.c_str(), filename.c_str());
+      RCLCPP_INFO(LOGGER, "Ignoring constraint approximation of type '%s' for group '%s' from '%s'...",
+                  state_space_parameterization.c_str(), group.c_str(), filename.c_str());
       continue;
     }
 
-    ROS_INFO_NAMED(LOGNAME,
-                   "Loading constraint approximation of type '%s' for "
-                   "group '%s' from '%s'...",
-                   state_space_parameterization.c_str(), group.c_str(), filename.c_str());
-    moveit_msgs::Constraints msg;
+    RCLCPP_INFO(LOGGER, "Loading constraint approximation of type '%s' for group '%s' from '%s'...",
+                state_space_parameterization.c_str(), group.c_str(), filename.c_str());
+    moveit_msgs::msg::Constraints msg;
     hexToMsg(serialization, msg);
     auto* cass = new ConstraintApproximationStateStorage(context_->getOMPLSimpleSetup()->getStateSpace());
     cass->load((std::string{ path }.append("/").append(filename)).c_str());
-    ConstraintApproximationPtr cap(new ConstraintApproximation(group, state_space_parameterization, explicit_motions,
-                                                               msg, filename, ompl::base::StateStoragePtr(cass),
-                                                               milestones));
+    auto cap = std::make_shared<ConstraintApproximation>(group, state_space_parameterization, explicit_motions, msg,
+                                                         filename, ompl::base::StateStoragePtr(cass), milestones);
     if (constraint_approximations_.find(cap->getName()) != constraint_approximations_.end())
-      ROS_WARN_NAMED(LOGNAME, "Overwriting constraint approximation named '%s'", cap->getName().c_str());
+      RCLCPP_WARN(LOGGER, "Overwriting constraint approximation named '%s'", cap->getName().c_str());
     constraint_approximations_[cap->getName()] = cap;
     std::size_t sum = 0;
     for (std::size_t i = 0; i < cass->size(); ++i)
       sum += cass->getMetadata(i).first.size();
-    ROS_INFO_NAMED(LOGNAME,
-                   "Loaded %lu states (%lu milestones) and %lu "
-                   "connections (%0.1lf per state) "
-                   "for constraint named '%s'%s",
-                   cass->size(), cap->getMilestoneCount(), sum, (double)sum / (double)cap->getMilestoneCount(),
-                   msg.name.c_str(), explicit_motions ? ". Explicit motions included." : "");
+    RCLCPP_INFO(LOGGER,
+                "Loaded %lu states (%lu milestones) and %lu connections (%0.1lf per state) "
+                "for constraint named '%s'%s",
+                cass->size(), cap->getMilestoneCount(), sum, (double)sum / (double)cap->getMilestoneCount(),
+                msg.name.c_str(), explicit_motions ? ". Explicit motions included." : "");
   }
-  ROS_INFO_NAMED(LOGNAME, "Done loading constrained space approximations.");
+  RCLCPP_INFO(LOGGER, "Done loading constrained space approximations.");
 }
 
 void ompl_interface::ConstraintsLibrary::saveConstraintApproximations(const std::string& path)
 {
-  ROS_INFO_NAMED(LOGNAME, "Saving %u constrained space approximations to '%s'",
-                 (unsigned int)constraint_approximations_.size(), path.c_str());
+  RCLCPP_INFO(LOGGER, "Saving %u constrained space approximations to '%s'",
+              (unsigned int)constraint_approximations_.size(), path.c_str());
   try
   {
-    boost::filesystem::create_directories(path);
+    std::filesystem::create_directory(path);
   }
   catch (...)
   {
@@ -362,19 +380,19 @@ void ompl_interface::ConstraintsLibrary::saveConstraintApproximations(const std:
     for (std::map<std::string, ConstraintApproximationPtr>::const_iterator it = constraint_approximations_.begin();
          it != constraint_approximations_.end(); ++it)
     {
-      fout << it->second->getGroup() << std::endl;
-      fout << it->second->getStateSpaceParameterization() << std::endl;
-      fout << it->second->hasExplicitMotions() << std::endl;
-      fout << it->second->getMilestoneCount() << std::endl;
+      fout << it->second->getGroup() << '\n';
+      fout << it->second->getStateSpaceParameterization() << '\n';
+      fout << it->second->hasExplicitMotions() << '\n';
+      fout << it->second->getMilestoneCount() << '\n';
       std::string serialization;
       msgToHex(it->second->getConstraintsMsg(), serialization);
-      fout << serialization << std::endl;
-      fout << it->second->getFilename() << std::endl;
+      fout << serialization << '\n';
+      fout << it->second->getFilename() << '\n';
       if (it->second->getStateStorage())
         it->second->getStateStorage()->store((path + "/" + it->second->getFilename()).c_str());
     }
   else
-    ROS_ERROR_NAMED(LOGNAME, "Unable to save constraint approximation to '%s'", path.c_str());
+    RCLCPP_ERROR(LOGGER, "Unable to save constraint approximation to '%s'", path.c_str());
   fout.close();
 }
 
@@ -388,17 +406,18 @@ void ompl_interface::ConstraintsLibrary::printConstraintApproximations(std::ostr
   for (const std::pair<const std::string, ConstraintApproximationPtr>& constraint_approximation :
        constraint_approximations_)
   {
-    out << constraint_approximation.second->getGroup() << std::endl;
-    out << constraint_approximation.second->getStateSpaceParameterization() << std::endl;
-    out << constraint_approximation.second->hasExplicitMotions() << std::endl;
-    out << constraint_approximation.second->getMilestoneCount() << std::endl;
-    out << constraint_approximation.second->getFilename() << std::endl;
-    out << constraint_approximation.second->getConstraintsMsg() << std::endl;
+    out << constraint_approximation.second->getGroup() << '\n';
+    out << constraint_approximation.second->getStateSpaceParameterization() << '\n';
+    out << constraint_approximation.second->hasExplicitMotions() << '\n';
+    out << constraint_approximation.second->getMilestoneCount() << '\n';
+    out << constraint_approximation.second->getFilename() << '\n';
+    // TODO(henningkayser): format print constraint message
+    // out << constraint_approximation.second->getConstraintsMsg() << '\n';
   }
 }
 
 const ompl_interface::ConstraintApproximationPtr&
-ompl_interface::ConstraintsLibrary::getConstraintApproximation(const moveit_msgs::Constraints& msg) const
+ompl_interface::ConstraintsLibrary::getConstraintApproximation(const moveit_msgs::msg::Constraints& msg) const
 {
   auto it = constraint_approximations_.find(msg.name);
   if (it != constraint_approximations_.end())
@@ -409,7 +428,7 @@ ompl_interface::ConstraintsLibrary::getConstraintApproximation(const moveit_msgs
 }
 
 ompl_interface::ConstraintApproximationConstructionResults
-ompl_interface::ConstraintsLibrary::addConstraintApproximation(const moveit_msgs::Constraints& constr,
+ompl_interface::ConstraintsLibrary::addConstraintApproximation(const moveit_msgs::msg::Constraints& constr,
                                                                const std::string& group,
                                                                const planning_scene::PlanningSceneConstPtr& scene,
                                                                const ConstraintApproximationConstructionOptions& options)
@@ -418,8 +437,8 @@ ompl_interface::ConstraintsLibrary::addConstraintApproximation(const moveit_msgs
 }
 
 ompl_interface::ConstraintApproximationConstructionResults
-ompl_interface::ConstraintsLibrary::addConstraintApproximation(const moveit_msgs::Constraints& constr_sampling,
-                                                               const moveit_msgs::Constraints& constr_hard,
+ompl_interface::ConstraintsLibrary::addConstraintApproximation(const moveit_msgs::msg::Constraints& constr_sampling,
+                                                               const moveit_msgs::msg::Constraints& constr_hard,
                                                                const std::string& group,
                                                                const planning_scene::PlanningSceneConstPtr& scene,
                                                                const ConstraintApproximationConstructionOptions& options)
@@ -428,8 +447,8 @@ ompl_interface::ConstraintsLibrary::addConstraintApproximation(const moveit_msgs
   if (context_->getGroupName() != group &&
       context_->getOMPLStateSpace()->getParameterizationType() != options.state_space_parameterization)
   {
-    ROS_INFO_NAMED(LOGNAME, "Ignoring constraint approximation of type '%s' for group '%s'...",
-                   options.state_space_parameterization.c_str(), group.c_str());
+    RCLCPP_INFO(LOGGER, "Ignoring constraint approximation of type '%s' for group '%s'...",
+                options.state_space_parameterization.c_str(), group.c_str());
     return res;
   }
 
@@ -437,30 +456,31 @@ ompl_interface::ConstraintsLibrary::addConstraintApproximation(const moveit_msgs
   context_->setPlanningScene(scene);
   context_->setCompleteInitialState(scene->getCurrentState());
 
-  ros::WallTime start = ros::WallTime::now();
+  rclcpp::Clock clock;
+  auto start = clock.now();
   ompl::base::StateStoragePtr state_storage =
       constructConstraintApproximation(context_, constr_sampling, constr_hard, options, res);
-  ROS_INFO_NAMED(LOGNAME, "Spent %lf seconds constructing the database", (ros::WallTime::now() - start).toSec());
+  RCLCPP_INFO(LOGGER, "Spent %lf seconds constructing the database", (clock.now() - start).seconds());
   if (state_storage)
   {
-    ConstraintApproximationPtr constraint_approx(new ConstraintApproximation(
+    auto constraint_approx = std::make_shared<ConstraintApproximation>(
         group, options.state_space_parameterization, options.explicit_motions, constr_hard,
         group + "_" + boost::posix_time::to_iso_extended_string(boost::posix_time::microsec_clock::universal_time()) +
             ".ompldb",
-        state_storage, res.milestones));
+        state_storage, res.milestones);
     if (constraint_approximations_.find(constraint_approx->getName()) != constraint_approximations_.end())
-      ROS_WARN_NAMED(LOGNAME, "Overwriting constraint approximation named '%s'", constraint_approx->getName().c_str());
+      RCLCPP_WARN(LOGGER, "Overwriting constraint approximation named '%s'", constraint_approx->getName().c_str());
     constraint_approximations_[constraint_approx->getName()] = constraint_approx;
     res.approx = constraint_approx;
   }
   else
-    ROS_ERROR_NAMED(LOGNAME, "Unable to construct constraint approximation for group '%s'", group.c_str());
+    RCLCPP_ERROR(LOGGER, "Unable to construct constraint approximation for group '%s'", group.c_str());
   return res;
 }
 
 ompl::base::StateStoragePtr ompl_interface::ConstraintsLibrary::constructConstraintApproximation(
-    ModelBasedPlanningContext* pcontext, const moveit_msgs::Constraints& constr_sampling,
-    const moveit_msgs::Constraints& constr_hard, const ConstraintApproximationConstructionOptions& options,
+    ModelBasedPlanningContext* pcontext, const moveit_msgs::msg::Constraints& constr_sampling,
+    const moveit_msgs::msg::Constraints& constr_hard, const ConstraintApproximationConstructionOptions& options,
     ConstraintApproximationConstructionResults& result)
 {
   // state storage structure
@@ -508,19 +528,19 @@ ompl::base::StateStoragePtr ompl_interface::ConstraintsLibrary::constructConstra
     if (done != done_now)
     {
       done = done_now;
-      ROS_INFO_NAMED(LOGNAME, "%d%% complete (kept %0.1lf%% sampled states)", done,
-                     100.0 * (double)state_storage->size() / (double)attempts);
+      RCLCPP_INFO(LOGGER, "%d%% complete (kept %0.1lf%% sampled states)", done,
+                  100.0 * (double)state_storage->size() / (double)attempts);
     }
 
     if (!slow_warn && attempts > 10 && attempts > state_storage->size() * 100)
     {
       slow_warn = true;
-      ROS_WARN_NAMED(LOGNAME, "Computation of valid state database is very slow...");
+      RCLCPP_WARN(LOGGER, "Computation of valid state database is very slow...");
     }
 
     if (attempts > options.samples && state_storage->size() == 0)
     {
-      ROS_ERROR_NAMED(LOGNAME, "Unable to generate any samples");
+      RCLCPP_ERROR(LOGGER, "Unable to generate any samples");
       break;
     }
 
@@ -537,18 +557,18 @@ ompl::base::StateStoragePtr ompl_interface::ConstraintsLibrary::constructConstra
   }
 
   result.state_sampling_time = ompl::time::seconds(ompl::time::now() - start);
-  ROS_INFO_NAMED(LOGNAME, "Generated %u states in %lf seconds", (unsigned int)state_storage->size(),
-                 result.state_sampling_time);
+  RCLCPP_INFO(LOGGER, "Generated %u states in %lf seconds", (unsigned int)state_storage->size(),
+              result.state_sampling_time);
   if (constrained_sampler)
   {
     result.sampling_success_rate = constrained_sampler->getConstrainedSamplingRate();
-    ROS_INFO_NAMED(LOGNAME, "Constrained sampling rate: %lf", result.sampling_success_rate);
+    RCLCPP_INFO(LOGGER, "Constrained sampling rate: %lf", result.sampling_success_rate);
   }
 
   result.milestones = state_storage->size();
   if (options.edges_per_sample > 0)
   {
-    ROS_INFO_NAMED(LOGNAME, "Computing graph connections (max %u edges per sample) ...", options.edges_per_sample);
+    RCLCPP_INFO(LOGGER, "Computing graph connections (max %u edges per sample) ...", options.edges_per_sample);
 
     // construct connections
     const ob::StateSpacePtr& space = pcontext->getOMPLSimpleSetup()->getStateSpace();
@@ -566,7 +586,7 @@ ompl::base::StateStoragePtr ompl_interface::ConstraintsLibrary::constructConstra
       if (done != done_now)
       {
         done = done_now;
-        ROS_INFO_NAMED(LOGNAME, "%d%% complete", done);
+        RCLCPP_INFO(LOGGER, "%d%% complete", done);
       }
       if (cass->getMetadata(j).first.size() >= options.edges_per_sample)
         continue;
@@ -622,8 +642,8 @@ ompl::base::StateStoragePtr ompl_interface::ConstraintsLibrary::constructConstra
     }
 
     result.state_connection_time = ompl::time::seconds(ompl::time::now() - start);
-    ROS_INFO_NAMED(LOGNAME, "Computed possible connections in %lf seconds. Added %d connections",
-                   result.state_connection_time, good);
+    RCLCPP_INFO(LOGGER, "Computed possible connexions in %lf seconds. Added %d connexions",
+                result.state_connection_time, good);
     pcontext->getOMPLSimpleSetup()->getSpaceInformation()->freeStates(int_states);
 
     return state_storage;
@@ -632,6 +652,6 @@ ompl::base::StateStoragePtr ompl_interface::ConstraintsLibrary::constructConstra
   // TODO(davetcoleman): this function did not originally return a value,
   // causing compiler warnings in ROS Melodic
   // Update with more intelligent logic as needed
-  ROS_ERROR_NAMED(LOGNAME, "No StateStoragePtr found - implement better solution here.");
+  RCLCPP_ERROR(LOGGER, "No StateStoragePtr found - implement better solution here.");
   return state_storage;
 }

@@ -45,7 +45,7 @@ class PoseModelStateSpaceFactory : public ModelBasedStateSpaceFactory
 public:
   PoseModelStateSpaceFactory();
 
-  int canRepresentProblem(const std::string& group, const moveit_msgs::MotionPlanRequest& req,
+  int canRepresentProblem(const std::string& group, const moveit_msgs::msg::MotionPlanRequest& req,
                           const moveit::core::RobotModelConstPtr& robot_model) const override;
 
 protected:

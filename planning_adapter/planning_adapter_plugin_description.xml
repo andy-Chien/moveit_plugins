@@ -1,0 +1,7 @@
+<library path="planning_adapter">
+
+  <class name="planning_adapter/AddTrajectoryObstacles" type="planning_adapter::AddTrajectoryObstacles" base_class_type="planning_request_adapter::PlanningRequestAdapter">
+    <description>
+    </description>
+  </class>
+</library>

@@ -180,7 +180,8 @@ public:
    * */
   ModelBasedPlanningContextPtr getPlanningContext(const planning_scene::PlanningSceneConstPtr& planning_scene,
                                                   const planning_interface::MotionPlanRequest& req,
-                                                  moveit_msgs::MoveItErrorCodes& error_code, const ros::NodeHandle& nh,
+                                                  moveit_msgs::msg::MoveItErrorCodes& error_code,
+                                                  const rclcpp::Node::SharedPtr& node,
                                                   bool use_constraints_approximations) const;
 
   void registerPlannerAllocator(const std::string& planner_id, const ConfiguredPlannerAllocator& pa)
@@ -206,8 +207,6 @@ public:
   ConfiguredPlannerSelector getPlannerSelector() const;
 
 protected:
-  typedef std::function<const ModelBasedStateSpaceFactoryPtr&(const std::string&)> StateSpaceFactoryTypeSelector;
-
   ConfiguredPlannerAllocator plannerSelector(const std::string& planner) const;
 
   void registerDefaultPlanners();
@@ -218,13 +217,12 @@ protected:
 
   /** \brief This is the function that constructs new planning contexts if no previous ones exist that are suitable */
   ModelBasedPlanningContextPtr getPlanningContext(const planning_interface::PlannerConfigurationSettings& config,
-                                                  const StateSpaceFactoryTypeSelector& factory_selector,
-                                                  const moveit_msgs::MotionPlanRequest& req) const;
+                                                  const ModelBasedStateSpaceFactoryPtr& factory,
+                                                  const moveit_msgs::msg::MotionPlanRequest& req) const;
 
-  const ModelBasedStateSpaceFactoryPtr& getStateSpaceFactory1(const std::string& group_name,
-                                                              const std::string& factory_type) const;
-  const ModelBasedStateSpaceFactoryPtr& getStateSpaceFactory2(const std::string& group_name,
-                                                              const moveit_msgs::MotionPlanRequest& req) const;
+  const ModelBasedStateSpaceFactoryPtr& getStateSpaceFactory(const std::string& factory_type) const;
+  const ModelBasedStateSpaceFactoryPtr& getStateSpaceFactory(const std::string& group_name,
+                                                             const moveit_msgs::msg::MotionPlanRequest& req) const;
 
   /** \brief The kinematic model for which motion plans are computed */
   moveit::core::RobotModelConstPtr robot_model_;

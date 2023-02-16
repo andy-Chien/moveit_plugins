@@ -40,11 +40,11 @@
 #include <moveit/constraint_samplers/constraint_sampler_manager.h>
 #include <moveit/constraint_sampler_manager_loader/constraint_sampler_manager_loader.h>
 #include <moveit/planning_interface/planning_interface.h>
-#include <moveit_msgs/MotionPlanRequest.h>
-#include <moveit_msgs/MotionPlanResponse.h>
+#include <moveit_msgs/msg/motion_plan_request.hpp>
+#include <moveit_msgs/msg/motion_plan_response.hpp>
+#include <rclcpp/node.hpp>
 #include <string>
 #include <map>
-#include <ros/ros.h>
 
 /** \brief The MoveIt interface to OMPL */
 namespace ompl_interface
@@ -55,16 +55,17 @@ class OMPLInterface
 {
 public:
   /** \brief Initialize OMPL-based planning for a particular robot model. ROS configuration is read from the specified
-   * NodeHandle */
-  OMPLInterface(const moveit::core::RobotModelConstPtr& robot_model, const ros::NodeHandle& nh = ros::NodeHandle("~"));
+   * Node */
+  OMPLInterface(const moveit::core::RobotModelConstPtr& robot_model, const rclcpp::Node::SharedPtr& node,
+                const std::string& parameter_namespace);
 
   /** \brief Initialize OMPL-based planning for a particular robot model. ROS configuration is read from the specified
-     NodeHandle. However,
-      planner configurations are used as specified in \e pconfig instead of reading them from the ROS parameter server
+     Node. However,
+      planner configurations are used as specified in \e pconfig instead of reading them from ROS parameters
      */
   OMPLInterface(const moveit::core::RobotModelConstPtr& robot_model,
-                const planning_interface::PlannerConfigurationMap& pconfig,
-                const ros::NodeHandle& nh = ros::NodeHandle("~"));
+                const planning_interface::PlannerConfigurationMap& pconfig, const rclcpp::Node::SharedPtr& node,
+                const std::string& parameter_namespace);
 
   virtual ~OMPLInterface();
 
@@ -83,7 +84,7 @@ public:
                                                   const planning_interface::MotionPlanRequest& req) const;
   ModelBasedPlanningContextPtr getPlanningContext(const planning_scene::PlanningSceneConstPtr& planning_scene,
                                                   const planning_interface::MotionPlanRequest& req,
-                                                  moveit_msgs::MoveItErrorCodes& error_code) const;
+                                                  moveit_msgs::msg::MoveItErrorCodes& error_code) const;
 
   const PlanningContextManager& getPlanningContextManager() const
   {
@@ -114,15 +115,6 @@ public:
   {
     return use_constraints_approximations_;
   }
-  bool simplifySolutions() const
-  {
-    return simplify_solutions_;
-  }
-
-  void simplifySolutions(bool flag)
-  {
-    simplify_solutions_ = flag;
-  }
 
   /** @brief Print the status of this node*/
   void printStatus();
@@ -139,15 +131,14 @@ protected:
   /** @brief Load the additional plugins for sampling constraints */
   void loadConstraintSamplers();
 
-  void configureContext(const ModelBasedPlanningContextPtr& context) const;
-
   /** \brief Configure the OMPL planning context for a new planning request */
   ModelBasedPlanningContextPtr prepareForSolve(const planning_interface::MotionPlanRequest& req,
                                                const planning_scene::PlanningSceneConstPtr& planning_scene,
-                                               moveit_msgs::MoveItErrorCodes* error_code, unsigned int* attempts,
+                                               moveit_msgs::msg::MoveItErrorCodes* error_code, unsigned int* attempts,
                                                double* timeout) const;
 
-  ros::NodeHandle nh_;  /// The ROS node handle
+  rclcpp::Node::SharedPtr node_;  /// The ROS node
+  const std::string parameter_namespace_;
 
   /** \brief The kinematic model for which motion plans are computed */
   moveit::core::RobotModelConstPtr robot_model_;
@@ -157,8 +148,6 @@ protected:
   PlanningContextManager context_manager_;
 
   bool use_constraints_approximations_;
-
-  bool simplify_solutions_;
 
 private:
   constraint_sampler_manager_loader::ConstraintSamplerManagerLoaderPtr constraint_sampler_manager_loader_;

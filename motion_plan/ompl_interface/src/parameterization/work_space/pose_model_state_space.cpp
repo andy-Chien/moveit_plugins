@@ -36,13 +36,12 @@
 
 #include <moveit/ompl_interface/parameterization/work_space/pose_model_state_space.h>
 #include <ompl/base/spaces/SE3StateSpace.h>
-#include <moveit/profiler/profiler.h>
 
 #include <utility>
 
 namespace ompl_interface
 {
-constexpr char LOGNAME[] = "pose_model_state_space";
+static const rclcpp::Logger LOGGER = rclcpp::get_logger("moveit.ompl_planning.pose_model_state_space");
 }  // namespace ompl_interface
 
 const std::string ompl_interface::PoseModelStateSpace::PARAMETERIZATION_TYPE = "PoseModel";
@@ -61,8 +60,8 @@ ompl_interface::PoseModelStateSpace::PoseModelStateSpace(const ModelBasedStateSp
       poses_.emplace_back(it.first, it.second);
   }
   if (poses_.empty())
-    ROS_ERROR_NAMED(LOGNAME, "No kinematics solvers specified. Unable to construct a "
-                             "PoseModelStateSpace");
+    RCLCPP_ERROR(LOGGER, "No kinematics solvers specified. Unable to construct a "
+                         "PoseModelStateSpace");
   else
     std::sort(poses_.begin(), poses_.end());
   setName(getName() + "_" + PARAMETERIZATION_TYPE);
@@ -128,8 +127,6 @@ void ompl_interface::PoseModelStateSpace::sanityChecks() const
 void ompl_interface::PoseModelStateSpace::interpolate(const ompl::base::State* from, const ompl::base::State* to,
                                                       const double t, ompl::base::State* state) const
 {
-  //  moveit::Profiler::ScopedBlock sblock("interpolate");
-
   // we want to interpolate in Cartesian space; we do not have a guarantee that from and to
   // have their poses computed, but this is very unlikely to happen (depends how the planner gets its input states)
 
@@ -200,7 +197,7 @@ bool ompl_interface::PoseModelStateSpace::PoseComponent::computeStateFK(StateTyp
     values[i] = full_state->values[bijection_[i]];
 
   // compute forward kinematics for the link of interest
-  std::vector<geometry_msgs::Pose> poses;
+  std::vector<geometry_msgs::msg::Pose> poses;
   if (!kinematics_solver_->getPositionFK(fk_link_, values, poses))
     return false;
 
@@ -227,11 +224,11 @@ bool ompl_interface::PoseModelStateSpace::PoseComponent::computeStateIK(StateTyp
   std::cout << "seed: ";
   for (std::size_t i = 0 ; i < seed_values.size() ; ++i)
     std::cout << seed_values[i] << " ";
-  std::cout << std::endl;
+  std::cout << '\n';
   */
 
   // construct the pose
-  geometry_msgs::Pose pose;
+  geometry_msgs::msg::Pose pose;
   const ompl::base::SE3StateSpace::StateType* se3_state = full_state->poses[idx];
   pose.position.x = se3_state->getX();
   pose.position.y = se3_state->getY();
@@ -244,10 +241,10 @@ bool ompl_interface::PoseModelStateSpace::PoseComponent::computeStateIK(StateTyp
 
   // run IK
   std::vector<double> solution(bijection_.size());
-  moveit_msgs::MoveItErrorCodes err_code;
+  moveit_msgs::msg::MoveItErrorCodes err_code;
   if (!kinematics_solver_->getPositionIK(pose, seed_values, solution, err_code))
   {
-    if (err_code.val != moveit_msgs::MoveItErrorCodes::TIMED_OUT ||
+    if (err_code.val != moveit_msgs::msg::MoveItErrorCodes::TIMED_OUT ||
         !kinematics_solver_->searchPositionIK(pose, seed_values, kinematics_solver_->getDefaultTimeout() * 2.0,
                                               solution, err_code))
       return false;

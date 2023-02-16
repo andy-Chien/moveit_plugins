@@ -1,0 +1,28 @@
+scene_buffer:
+  robot_names: {
+    type: string_array,
+    default_value: [robot_1],
+    description: "All robots considered by the scene buffer",
+    validation: {
+      not_empty<>: []
+    }
+  }
+  padding: {
+    type: double,
+    default_value: 0.0,
+    description: "padding for the trajectory obstacles",
+    validation: {
+      gt_eq<>: [ 0.0 ]
+    }
+  }
+  collision_maps:
+    __map_robot_names: 
+      collision_robots: {
+        type: string_array,
+        default_value: [robot_1],
+        description: "Those robots may collide",
+        validation: {
+          not_empty<>: []
+        }
+      }
+

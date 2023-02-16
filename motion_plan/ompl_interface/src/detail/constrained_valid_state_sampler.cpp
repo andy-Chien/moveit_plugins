@@ -36,13 +36,12 @@
 
 #include <moveit/ompl_interface/detail/constrained_valid_state_sampler.h>
 #include <moveit/ompl_interface/model_based_planning_context.h>
-#include <moveit/profiler/profiler.h>
 
 #include <utility>
 
 namespace ompl_interface
 {
-constexpr char LOGNAME[] = "constrained_valid_state_sampler";
+static const rclcpp::Logger LOGGER = rclcpp::get_logger("moveit.ompl_planning.constrained_valid_state_sampler");
 }  // namespace ompl_interface
 
 ompl_interface::ValidConstrainedSampler::ValidConstrainedSampler(const ModelBasedPlanningContext* pc,
@@ -57,7 +56,7 @@ ompl_interface::ValidConstrainedSampler::ValidConstrainedSampler(const ModelBase
   if (!constraint_sampler_)
     default_sampler_ = si_->allocStateSampler();
   inv_dim_ = si_->getStateSpace()->getDimension() > 0 ? 1.0 / (double)si_->getStateSpace()->getDimension() : 1.0;
-  ROS_DEBUG_NAMED(LOGNAME, "Constructed a ValidConstrainedSampler instance at address %p", this);
+  RCLCPP_DEBUG(LOGGER, "Constructed a ValidConstrainedSampler instance at address %p", this);
 }
 
 bool ompl_interface::ValidConstrainedSampler::project(ompl::base::State* state)
@@ -79,7 +78,6 @@ bool ompl_interface::ValidConstrainedSampler::project(ompl::base::State* state)
 
 bool ompl_interface::ValidConstrainedSampler::sample(ob::State* state)
 {
-  //  moveit::Profiler::ScopedBlock pblock("ValidConstrainedSampler::sample");
   if (constraint_sampler_)
   {
     if (constraint_sampler_->sample(work_state_, planning_context_->getCompleteInitialRobotState(),

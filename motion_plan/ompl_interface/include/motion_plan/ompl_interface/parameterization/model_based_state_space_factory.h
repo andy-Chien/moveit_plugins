@@ -38,7 +38,7 @@
 
 #include <moveit/macros/class_forward.h>
 #include <moveit/ompl_interface/parameterization/model_based_state_space.h>
-#include <moveit_msgs/MotionPlanRequest.h>
+#include <moveit_msgs/msg/motion_plan_request.hpp>
 
 namespace ompl_interface
 {
@@ -66,7 +66,7 @@ public:
      the user
       request \e req for group \e group. The group \e group must always be specified and takes precedence over \e
      req.group_name, which may be different */
-  virtual int canRepresentProblem(const std::string& group, const moveit_msgs::MotionPlanRequest& req,
+  virtual int canRepresentProblem(const std::string& group, const moveit_msgs::msg::MotionPlanRequest& req,
                                   const moveit::core::RobotModelConstPtr& robot_model) const = 0;
 
 protected:
