@@ -7,10 +7,10 @@ SceneBuffer::SceneBuffer(const std::string& node_name, const rclcpp::NodeOptions
 : Node(node_name, node_options)
 {
   get_obstacle_service_ = this->create_service<ObstacleSrv>(
-    "get_trajectory_obstacle", std::bind(
+    "/get_trajectory_obstacle", std::bind(
       &SceneBuffer::get_obstacle_cb, this, std::placeholders::_1, std::placeholders::_2));
   set_trajectory_service_ = this->create_service<TrajectorySrv>(
-    "set_planned_trajectory", std::bind(
+    "/set_trajectory_state", std::bind(
       &SceneBuffer::set_trajectory_cb, this, std::placeholders::_1, std::placeholders::_2));
 }
 
@@ -19,7 +19,8 @@ void SceneBuffer::init()
   // Create the parameter listener and get the parameters
   param_listener_ = std::make_shared<ParamListener>(shared_from_this());
   params_ = param_listener_->get_params();
-  rclcpp::SubscriptionOptions options;
+  delay_duration_ = std::make_unique<rclcpp::Duration>(
+    std::chrono::nanoseconds(int32_t(params_.delay_duration * 1e9)));
   for(const auto& robot_name : params_.robot_names)
   {
     auto robot = std::make_shared<Robot>(shared_from_this(), robot_name, params_.padding);
@@ -165,11 +166,11 @@ bool SceneBuffer::get_obstacle_cb(
     return p;
   };
 
-  const auto& tarj_start_time = [](const auto& trajectory){
+  const auto& get_tarj_start_time = [](const auto& trajectory){
     return rclcpp::Time(trajectory->header.stamp);
   };
-  const auto& tarj_last_time = [&tarj_start_time](const auto& trajectory){
-    return rclcpp::Time(tarj_start_time(trajectory) + rclcpp::Duration(
+  const auto& tarj_last_time = [&get_tarj_start_time](const auto& trajectory){
+    return rclcpp::Time(get_tarj_start_time(trajectory) + rclcpp::Duration(
       trajectory->points.back().time_from_start));
   };
 
@@ -186,18 +187,14 @@ bool SceneBuffer::get_obstacle_cb(
     };
 
   const auto& check_last_time = 
-    [&tarj_start_time, &tarj_last_time](const rclcpp::Time t, const auto& traj){
-      return tarj_start_time(traj).nanoseconds() > 0 && t > tarj_last_time(traj);
+    [&get_tarj_start_time, &tarj_last_time](const rclcpp::Time& t, const auto& traj){
+      return get_tarj_start_time(traj).nanoseconds() > 0 && t > tarj_last_time(traj);
     };
 
-  const auto& check_all_last_time = 
-    [&check_last_time](const rclcpp::Time t, const auto& trajectories){
-      for(const auto& traj : trajectories){
-        if(!check_last_time(t, traj)){
-          return false;
-        }
-      }
-      return true;
+  const auto& check_running_time_with_delay = 
+    [this](const rclcpp::Time& start_time, const rclcpp::Time& tarj_start_time, const auto& point){
+      return start_time > (tarj_start_time + 
+        rclcpp::Duration(point.time_from_start) + *delay_duration_);
     };
 
   const std::string req_robot_name = [](std::string& robot_name){
@@ -226,11 +223,13 @@ bool SceneBuffer::get_obstacle_cb(
     const auto& other_robot = robots_.at(other_name);
     other_robot->clean_poses();
 
-    std::cout<<"other_name = "<<other_name<<", traj size = "<<
-      other_robot->trajectories.size()<<std::endl;
+    if(other_robot->running_trajectory && 
+      check_last_time(start_time, other_robot->running_trajectory))
+    {
+      other_robot->running_trajectory = nullptr;
+    }
 
-    if(other_robot->trajectories.size() == 0 || 
-      check_all_last_time(start_time, other_robot->trajectories))
+    if(!(other_robot->planned_trajectory || other_robot->running_trajectory))
     {
       other_robot->update_to_current();
       get_link_poses_from_state(other_robot);
@@ -238,23 +237,23 @@ bool SceneBuffer::get_obstacle_cb(
       continue;
     }
 
-    for(const auto& trajectory : other_robot->trajectories)
+    const auto& trajectory = (other_robot->running_trajectory) ? 
+      other_robot->running_trajectory : other_robot->planned_trajectory;
+    const auto& traj_joint_names = trajectory->joint_names;
+    const auto& tarj_start_time = get_tarj_start_time(trajectory);
+    for(const auto& point : trajectory->points)
     {
-      const auto& traj_joint_names = trajectory->joint_names;
-
-      for(const auto& point : trajectory->points)
-      {
-        if(start_time > (tarj_start_time(trajectory) + rclcpp::Duration(point.time_from_start))){
-          continue;
-        }
-        for(size_t i=0; i<traj_joint_names.size(); i++)
-        {
-          other_robot->state->setJointPositions(
-            traj_joint_names[i], &(point.positions[i]));
-        }
-        other_robot->state->update();
-        get_link_poses_from_state(other_robot);
+      if(other_robot->running_trajectory && 
+        check_running_time_with_delay(start_time, tarj_start_time, point)){
+        continue;
       }
+      for(size_t i=0; i<traj_joint_names.size(); i++)
+      {
+        other_robot->state->setJointPositions(
+          traj_joint_names[i], &(point.positions[i]));
+      }
+      other_robot->state->update();
+      get_link_poses_from_state(other_robot);
     }
     res->obstacles_list.push_back(other_robot->obstacles);
   }
@@ -356,9 +355,44 @@ bool SceneBuffer::set_trajectory_cb(
   const std::shared_ptr<TrajectorySrv::Request> req,
   std::shared_ptr<TrajectorySrv::Response> res)
 {
-  robots_.at(req->robot_name)->trajectories.push_back(
-    std::make_shared<TrajectoryMsg>(std::move(req->trajectory)));
-  
+  const std::string req_robot_name = [](std::string& robot_name){
+    if(robot_name.size() > 1 && robot_name.at(0) == '/'){
+      return std::string(robot_name.begin() + 1, robot_name.end());
+    }else{
+      return robot_name;
+    }
+  }(req->header.frame_id);
+
+  rclcpp::Time t;
+
+  const auto& robot = robots_.at(req_robot_name);
   res->success = true;
+  switch (req->action)
+  {
+  case TrajectorySrv::Request::SET_PLANNED_TRAJECTORY:
+    robot->planned_trajectory = 
+      std::make_shared<TrajectoryMsg>(std::move(req->trajectory));
+    break;
+
+  case TrajectorySrv::Request::MARK_TRAJECTORY_START_TIME:
+    robot->running_trajectory = robot->planned_trajectory;
+    robot->running_trajectory->header.stamp = req->header.stamp;
+    t = rclcpp::Time(robot->running_trajectory->header.stamp);
+    robot->planned_trajectory = nullptr;
+    break;
+
+  case TrajectorySrv::Request::TRAJECTORY_DONE_OR_CANCEL:
+    robot->running_trajectory = nullptr;
+    break;
+  
+  case TrajectorySrv::Request::ERASE_PLANNED_TRAJECTORY:
+    robot->planned_trajectory = nullptr;
+    break;
+  
+  default:
+    res->success = false;
+    RCLCPP_ERROR(get_logger(), "Unknown trajectory setting action!");
+    break;
+  }
   return true;
 }

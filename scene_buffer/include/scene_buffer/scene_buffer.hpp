@@ -10,7 +10,7 @@
 
 #include "mr_msgs/msg/obstacles.hpp"
 #include "mr_msgs/srv/get_robot_trajectory_obstacle.hpp"
-#include "mr_msgs/srv/set_planned_trajectory.hpp"
+#include "mr_msgs/srv/set_trajectory_state.hpp"
 #include "scene_buffer_parameters.hpp"
 
 class SceneBuffer : public rclcpp::Node
@@ -65,6 +65,8 @@ public:
     std::vector<moveit::core::LinkModel*> mesh_links;
     std::vector<moveit::core::LinkModel*> prim_links;
     std::vector<std::shared_ptr<TrajectoryMsg>> trajectories;
+    std::shared_ptr<TrajectoryMsg> planned_trajectory{nullptr};
+    std::shared_ptr<TrajectoryMsg> running_trajectory{nullptr};
 
   private:
     void load_robot(const std::string& robot_name);
@@ -84,7 +86,7 @@ public:
 private:
 
   using ObstacleSrv = mr_msgs::srv::GetRobotTrajectoryObstacle;
-  using TrajectorySrv = mr_msgs::srv::SetPlannedTrajectory;
+  using TrajectorySrv = mr_msgs::srv::SetTrajectoryState;
 
   bool get_obstacle_cb(
     const std::shared_ptr<ObstacleSrv::Request> req,
@@ -101,6 +103,7 @@ private:
   std::shared_ptr<ParamListener> param_listener_;
   Params params_;
 
+  std::unique_ptr<rclcpp::Duration> delay_duration_;
   std::map<std::string, std::shared_ptr<Robot>> robots_;
   rclcpp::Service<ObstacleSrv>::SharedPtr get_obstacle_service_;
   rclcpp::Service<TrajectorySrv>::SharedPtr set_trajectory_service_;

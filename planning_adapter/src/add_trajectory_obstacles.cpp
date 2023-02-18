@@ -43,14 +43,14 @@
 #include <moveit/planning_request_adapter/planning_request_adapter.h>
 #include <moveit/collision_detection_fcl/collision_detector_allocator_fcl.h>
 
-#include "mr_msgs/srv/set_planned_trajectory.hpp"
+#include "mr_msgs/srv/set_trajectory_state.hpp"
 #include "mr_msgs/srv/get_robot_trajectory_obstacle.hpp"
 
 namespace planning_adapter
 {
 rclcpp::Logger logger(rclcpp::get_logger("plan_adapter.trajectory_obstacles"));
 std::string get_obs_service_name("/get_trajectory_obstacle");
-std::string set_traj_service_name("/set_planned_trajectory");
+std::string set_traj_service_name("/set_trajectory_state");
 
 class AddTrajectoryObstacles : public planning_request_adapter::PlanningRequestAdapter
 {
@@ -67,6 +67,7 @@ public:
     rclcpp::Time t_start = this_node_->now();
     auto obs_req = std::make_shared<mr_msgs::srv::GetRobotTrajectoryObstacle::Request>();
     obs_req->header = req.start_state.joint_state.header;
+    obs_req->header.stamp = this_node_->now();
     obs_req->robot_name = robot_name_;
 
     if(!(*planning_scene_))
@@ -88,8 +89,6 @@ public:
       world->clearObjects();
       return result;
     };
-
-
 
     if(!get_obs_client_->wait_for_service(std::chrono::milliseconds(500))){
       RCLCPP_ERROR(logger,
@@ -195,9 +194,10 @@ public:
 
     moveit_msgs::msg::MotionPlanResponse res_msg;
     res.getMessage(res_msg);
-    auto traj_req = std::make_shared<mr_msgs::srv::SetPlannedTrajectory::Request>();
+    auto traj_req = std::make_shared<mr_msgs::srv::SetTrajectoryState::Request>();
+    traj_req->header.frame_id = robot_name_;
     traj_req->trajectory = res_msg.trajectory.joint_trajectory;
-    traj_req->robot_name = robot_name_;
+    traj_req->action = mr_msgs::srv::SetTrajectoryState::Request::SET_PLANNED_TRAJECTORY;
 
     if(!set_traj_client_->wait_for_service(std::chrono::milliseconds(500))){
       RCLCPP_ERROR(logger,
@@ -205,7 +205,7 @@ public:
       res.error_code_.val = moveit_msgs::msg::MoveItErrorCodes::FAILURE;
       return clear_and_return(false);
     }
-    std::shared_future<std::shared_ptr<mr_msgs::srv::SetPlannedTrajectory_Response>> 
+    std::shared_future<std::shared_ptr<mr_msgs::srv::SetTrajectoryState_Response>> 
       set_traj_future = set_traj_client_->async_send_request(traj_req).future.share();
     while(set_traj_future.wait_for(std::chrono::milliseconds(500)) == std::future_status::timeout){
       RCLCPP_WARN(logger, 
@@ -339,7 +339,7 @@ public:
       mr_msgs::srv::GetRobotTrajectoryObstacle>(get_obs_service_name);
 
     set_traj_client_ = this_node_->create_client<
-      mr_msgs::srv::SetPlannedTrajectory>(set_traj_service_name);
+      mr_msgs::srv::SetTrajectoryState>(set_traj_service_name);
 
     planning_scene_ = new std::shared_ptr<planning_scene::PlanningScene>;
 
@@ -359,7 +359,7 @@ protected:
   std::thread this_node_thread_;
   rclcpp::Node::SharedPtr this_node_;
   std::shared_ptr<planning_scene::PlanningScene>* planning_scene_;
-  rclcpp::Client<mr_msgs::srv::SetPlannedTrajectory>::SharedPtr set_traj_client_;
+  rclcpp::Client<mr_msgs::srv::SetTrajectoryState>::SharedPtr set_traj_client_;
   rclcpp::Client<mr_msgs::srv::GetRobotTrajectoryObstacle>::SharedPtr get_obs_client_;
 };
 }  // namespace planning_adapter
