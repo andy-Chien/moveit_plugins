@@ -43,14 +43,14 @@
 #include <moveit/planning_request_adapter/planning_request_adapter.h>
 #include <moveit/collision_detection_fcl/collision_detector_allocator_fcl.h>
 
-#include "mr_msgs/srv/set_planned_trajectory.hpp"
+#include "mr_msgs/srv/set_trajectory_state.hpp"
 #include "mr_msgs/srv/get_robot_trajectory_obstacle.hpp"
 
 namespace planning_adapter
 {
 rclcpp::Logger logger(rclcpp::get_logger("plan_adapter.trajectory_obstacles"));
 std::string get_obs_service_name("/get_trajectory_obstacle");
-std::string set_traj_service_name("/set_planned_trajectory");
+std::string set_traj_service_name("/set_trajectory_state");
 
 class AddTrajectoryObstacles : public planning_request_adapter::PlanningRequestAdapter
 {
@@ -67,7 +67,40 @@ public:
     rclcpp::Time t_start = this_node_->now();
     auto obs_req = std::make_shared<mr_msgs::srv::GetRobotTrajectoryObstacle::Request>();
     obs_req->header = req.start_state.joint_state.header;
+    obs_req->header.stamp = this_node_->now();
     obs_req->robot_name = robot_name_;
+
+    const auto set_trajectory_state = [&](bool plan_success){
+      moveit_msgs::msg::MotionPlanResponse res_msg;
+      auto traj_req = std::make_shared<mr_msgs::srv::SetTrajectoryState::Request>();
+      traj_req->header.frame_id = robot_name_;
+      if(plan_success)
+      {
+        res.getMessage(res_msg);
+        traj_req->trajectory = res_msg.trajectory.joint_trajectory;
+        traj_req->action = mr_msgs::srv::SetTrajectoryState::Request::SET_PLANNED_TRAJECTORY;
+      }else{
+        traj_req->action = mr_msgs::srv::SetTrajectoryState::Request::PLANNING_FAILED;
+      }
+
+      if(!set_traj_client_->wait_for_service(std::chrono::milliseconds(500))){
+        RCLCPP_ERROR(logger,
+          "'%s' wait for service '%s' failed!", robot_name_.c_str(), set_traj_service_name.c_str());
+        res.error_code_.val = moveit_msgs::msg::MoveItErrorCodes::FAILURE;
+        return false;
+      }
+      std::shared_future<std::shared_ptr<mr_msgs::srv::SetTrajectoryState_Response>> 
+        set_traj_future = set_traj_client_->async_send_request(traj_req).future.share();
+      while(set_traj_future.wait_for(std::chrono::milliseconds(500)) == std::future_status::timeout){
+        RCLCPP_WARN(logger, 
+          "'%s' waiting for the response from set traj service!", robot_name_.c_str());
+      }
+      if(!set_traj_future.get()->success){
+        RCLCPP_ERROR(logger, "'%s' set planned trajectory failed!", robot_name_.c_str());
+      }
+      return set_traj_future.get()->success;
+    };
+    
 
     if(!(*planning_scene_))
     {
@@ -89,8 +122,6 @@ public:
       return result;
     };
 
-
-
     if(!get_obs_client_->wait_for_service(std::chrono::milliseconds(500))){
       RCLCPP_ERROR(logger,
         "'%s' wait for service '%s' failed!", robot_name_.c_str(), get_obs_service_name.c_str());
@@ -99,15 +130,15 @@ public:
     std::shared_future<std::shared_ptr<mr_msgs::srv::GetRobotTrajectoryObstacle_Response>> 
       get_obs_future = get_obs_client_->async_send_request(obs_req).future.share();
 
-    if(get_obs_future.wait_for(std::chrono::milliseconds(500)) != std::future_status::timeout)
+    if(get_obs_future.wait_for(std::chrono::seconds(3)) != std::future_status::timeout)
     {
-
       for(const auto& obs : get_obs_future.get()->obstacles_list){
         std::vector<shapes::ShapeConstPtr> shapes;
         EigenSTL::vector_Isometry3d shape_poses;
 
         if(!shapesAndPosesFromObstacles(obs, shapes, shape_poses)){
           RCLCPP_ERROR(logger, "'%s' add obstacles failed!", robot_name_.c_str());
+          set_trajectory_state(false);
           return clear_and_return(false);
         }
         const Eigen::Isometry3d& world_to_object_header_transform = 
@@ -118,6 +149,7 @@ public:
     }else{
       RCLCPP_ERROR(logger, 
         "'%s' service '%s' time out!", robot_name_.c_str(), get_obs_service_name.c_str());
+      set_trajectory_state(false);
       return clear_and_return(false);
     }
 
@@ -129,6 +161,7 @@ public:
     // (*planning_scene_)->allocateCollisionDetector(collision_detection::CollisionDetectorAllocatorFCL::create());
     
     if(!planner(*planning_scene_, req, res)){
+      set_trajectory_state(false);
       return clear_and_return(false);
     }
 
@@ -139,82 +172,85 @@ public:
     std::cout<<"world->size() = "<<world->size()<<std::endl;
     std::cout<<"planning_scene->getWorld()->size() = "<<planning_scene->getWorld()->size()<<std::endl;
     std::cout<<"(*planning_scene_)->getWorld->size() = "<<(*planning_scene_)->getWorld()->size()<<std::endl;
-    auto obj_ids = (*planning_scene_)->getWorld()->getObjectIds();
-    for(const auto& obj_id : obj_ids)
-    {
-      const auto& obj = *((*planning_scene_)->getWorld()->getObject(obj_id));
-      std::cout<<obj.id_<<std::endl;
-      Eigen::Matrix3d m = obj.pose_.rotation();
-      Eigen::Vector3d v = obj.pose_.translation();
-      std::cout << "Rotation: " << std::endl << m << std::endl;
-      std::cout << "Translation: " << std::endl << v << std::endl;
-      for(auto x : obj.shape_poses_)
-      {
-        m = x.rotation();
-        v = x.translation();
-        std::cout << "Rotation: " << std::endl << m << std::endl;
-        std::cout << "Translation: " << std::endl << v << std::endl;
-      }
-      for(auto [a, x] : obj.subframe_poses_)
-      {
-        m = x.rotation();
-        v = x.translation();
-        std::cout << "Rotation: " << std::endl << m << std::endl;
-        std::cout << "Translation: " << std::endl << v << std::endl;
-      }
-      std::cout<<"getObjectType(obj_id) = "<<(*planning_scene_)->getObjectType(obj_id).key<<", "<<(*planning_scene_)->getObjectType(obj_id).db<<std::endl;
-      // world_out->addToObject(obj.id_, obj.pose_, obj.shapes_, obj.shape_poses_);
-      // world_out->setSubframesOfObject(obj.id_, obj.subframe_poses_);
-    }
-    std::cout<<"---------"<<std::endl;
-    obj_ids = planning_scene->getWorld()->getObjectIds();
-    for(const auto& obj_id : obj_ids)
-    {
-      const auto& obj = *(planning_scene->getWorld()->getObject(obj_id));
-      std::cout<<obj.id_<<std::endl;
-      Eigen::Matrix3d m = obj.pose_.rotation();
-      Eigen::Vector3d v = obj.pose_.translation();
-      std::cout << "Rotation: " << std::endl << m << std::endl;
-      std::cout << "Translation: " << std::endl << v << std::endl;
-      for(auto x : obj.shape_poses_)
-      {
-        m = x.rotation();
-        v = x.translation();
-        std::cout << "Rotation: " << std::endl << m << std::endl;
-        std::cout << "Translation: " << std::endl << v << std::endl;
-      }
-      for(auto [a, x] : obj.subframe_poses_)
-      {
-        m = x.rotation();
-        v = x.translation();
-        std::cout << "Rotation: " << std::endl << m << std::endl;
-        std::cout << "Translation: " << std::endl << v << std::endl;
-      }
-      std::cout<<"getObjectType(obj_id) = "<<planning_scene->getObjectType(obj_id).key<<", "<<planning_scene->getObjectType(obj_id).db<<std::endl;
-    }
+    // auto obj_ids = (*planning_scene_)->getWorld()->getObjectIds();
+    // for(const auto& obj_id : obj_ids)
+    // {
+    //   const auto& obj = *((*planning_scene_)->getWorld()->getObject(obj_id));
+    //   std::cout<<obj.id_<<std::endl;
+    //   Eigen::Matrix3d m = obj.pose_.rotation();
+    //   Eigen::Vector3d v = obj.pose_.translation();
+    //   std::cout << "Rotation: " << std::endl << m << std::endl;
+    //   std::cout << "Translation: " << std::endl << v << std::endl;
+    //   for(auto x : obj.shape_poses_)
+    //   {
+    //     m = x.rotation();
+    //     v = x.translation();
+    //     std::cout << "Rotation: " << std::endl << m << std::endl;
+    //     std::cout << "Translation: " << std::endl << v << std::endl;
+    //   }
+    //   for(auto [a, x] : obj.subframe_poses_)
+    //   {
+    //     m = x.rotation();
+    //     v = x.translation();
+    //     std::cout << "Rotation: " << std::endl << m << std::endl;
+    //     std::cout << "Translation: " << std::endl << v << std::endl;
+    //   }
+    //   std::cout<<"getObjectType(obj_id) = "<<(*planning_scene_)->getObjectType(obj_id).key<<", "<<(*planning_scene_)->getObjectType(obj_id).db<<std::endl;
+    //   // world_out->addToObject(obj.id_, obj.pose_, obj.shapes_, obj.shape_poses_);
+    //   // world_out->setSubframesOfObject(obj.id_, obj.subframe_poses_);
+    // }
+    // std::cout<<"---------"<<std::endl;
+    // obj_ids = planning_scene->getWorld()->getObjectIds();
+    // for(const auto& obj_id : obj_ids)
+    // {
+    //   const auto& obj = *(planning_scene->getWorld()->getObject(obj_id));
+    //   std::cout<<obj.id_<<std::endl;
+    //   Eigen::Matrix3d m = obj.pose_.rotation();
+    //   Eigen::Vector3d v = obj.pose_.translation();
+    //   std::cout << "Rotation: " << std::endl << m << std::endl;
+    //   std::cout << "Translation: " << std::endl << v << std::endl;
+    //   for(auto x : obj.shape_poses_)
+    //   {
+    //     m = x.rotation();
+    //     v = x.translation();
+    //     std::cout << "Rotation: " << std::endl << m << std::endl;
+    //     std::cout << "Translation: " << std::endl << v << std::endl;
+    //   }
+    //   for(auto [a, x] : obj.subframe_poses_)
+    //   {
+    //     m = x.rotation();
+    //     v = x.translation();
+    //     std::cout << "Rotation: " << std::endl << m << std::endl;
+    //     std::cout << "Translation: " << std::endl << v << std::endl;
+    //   }
+    //   std::cout<<"getObjectType(obj_id) = "<<planning_scene->getObjectType(obj_id).key<<", "<<planning_scene->getObjectType(obj_id).db<<std::endl;
+    // }
 
-    moveit_msgs::msg::MotionPlanResponse res_msg;
-    res.getMessage(res_msg);
-    auto traj_req = std::make_shared<mr_msgs::srv::SetPlannedTrajectory::Request>();
-    traj_req->trajectory = res_msg.trajectory.joint_trajectory;
-    traj_req->robot_name = robot_name_;
+    // moveit_msgs::msg::MotionPlanResponse res_msg;
+    // res.getMessage(res_msg);
+    // auto traj_req = std::make_shared<mr_msgs::srv::SetTrajectoryState::Request>();
+    // traj_req->header.frame_id = robot_name_;
+    // traj_req->trajectory = res_msg.trajectory.joint_trajectory;
+    // traj_req->action = mr_msgs::srv::SetTrajectoryState::Request::SET_PLANNED_TRAJECTORY;
 
-    if(!set_traj_client_->wait_for_service(std::chrono::milliseconds(500))){
-      RCLCPP_ERROR(logger,
-        "'%s' wait for service '%s' failed!", robot_name_.c_str(), set_traj_service_name.c_str());
-      res.error_code_.val = moveit_msgs::msg::MoveItErrorCodes::FAILURE;
-      return clear_and_return(false);
-    }
-    std::shared_future<std::shared_ptr<mr_msgs::srv::SetPlannedTrajectory_Response>> 
-      set_traj_future = set_traj_client_->async_send_request(traj_req).future.share();
-    while(set_traj_future.wait_for(std::chrono::milliseconds(500)) == std::future_status::timeout){
-      RCLCPP_WARN(logger, 
-        "'%s' waiting for the response from set traj service!", robot_name_.c_str());
-    }
-    if(!set_traj_future.get()->success){
-      RCLCPP_ERROR(logger, "'%s' set planned trajectory failed!", robot_name_.c_str());
-    }
-    return clear_and_return(set_traj_future.get()->success);
+    // if(!set_traj_client_->wait_for_service(std::chrono::milliseconds(500))){
+    //   RCLCPP_ERROR(logger,
+    //     "'%s' wait for service '%s' failed!", robot_name_.c_str(), set_traj_service_name.c_str());
+    //   res.error_code_.val = moveit_msgs::msg::MoveItErrorCodes::FAILURE;
+    //   return clear_and_return(false);
+    // }
+    // std::shared_future<std::shared_ptr<mr_msgs::srv::SetTrajectoryState_Response>> 
+    //   set_traj_future = set_traj_client_->async_send_request(traj_req).future.share();
+    // while(set_traj_future.wait_for(std::chrono::milliseconds(500)) == std::future_status::timeout){
+    //   RCLCPP_WARN(logger, 
+    //     "'%s' waiting for the response from set traj service!", robot_name_.c_str());
+    // }
+    // if(!set_traj_future.get()->success){
+    //   RCLCPP_ERROR(logger, "'%s' set planned trajectory failed!", robot_name_.c_str());
+    // }
+    // return clear_and_return(set_traj_future.get()->success);
+    bool plan_success = res.error_code_.val == moveit_msgs::msg::MoveItErrorCodes::SUCCESS;
+    return clear_and_return(plan_success && set_trajectory_state(plan_success));
   }
 
   void copyPlanningScene(const planning_scene::PlanningSceneConstPtr& scene_in,
@@ -339,7 +375,7 @@ public:
       mr_msgs::srv::GetRobotTrajectoryObstacle>(get_obs_service_name);
 
     set_traj_client_ = this_node_->create_client<
-      mr_msgs::srv::SetPlannedTrajectory>(set_traj_service_name);
+      mr_msgs::srv::SetTrajectoryState>(set_traj_service_name);
 
     planning_scene_ = new std::shared_ptr<planning_scene::PlanningScene>;
 
@@ -359,7 +395,7 @@ protected:
   std::thread this_node_thread_;
   rclcpp::Node::SharedPtr this_node_;
   std::shared_ptr<planning_scene::PlanningScene>* planning_scene_;
-  rclcpp::Client<mr_msgs::srv::SetPlannedTrajectory>::SharedPtr set_traj_client_;
+  rclcpp::Client<mr_msgs::srv::SetTrajectoryState>::SharedPtr set_traj_client_;
   rclcpp::Client<mr_msgs::srv::GetRobotTrajectoryObstacle>::SharedPtr get_obs_client_;
 };
 }  // namespace planning_adapter
