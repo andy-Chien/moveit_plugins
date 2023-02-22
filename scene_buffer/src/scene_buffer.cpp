@@ -6,12 +6,15 @@
 SceneBuffer::SceneBuffer(const std::string& node_name, const rclcpp::NodeOptions& node_options)
 : Node(node_name, node_options)
 {
+  cb_group_ = this->create_callback_group(rclcpp::CallbackGroupType::Reentrant);
   get_obstacle_service_ = this->create_service<ObstacleSrv>(
     "/get_trajectory_obstacle", std::bind(
-      &SceneBuffer::get_obstacle_cb, this, std::placeholders::_1, std::placeholders::_2));
+      &SceneBuffer::get_obstacle_cb, this, std::placeholders::_1, std::placeholders::_2), 
+      rmw_qos_profile_services_default, cb_group_);
   set_trajectory_service_ = this->create_service<TrajectorySrv>(
     "/set_trajectory_state", std::bind(
-      &SceneBuffer::set_trajectory_cb, this, std::placeholders::_1, std::placeholders::_2));
+      &SceneBuffer::set_trajectory_cb, this, std::placeholders::_1, std::placeholders::_2),
+      rmw_qos_profile_services_default, cb_group_);
 }
 
 void SceneBuffer::init()
@@ -68,54 +71,6 @@ void SceneBuffer::Robot::load_robot(const std::string& urdf, const std::string& 
   model->printModelInfo(std::cout);
   std::cout<<"ddddddddddddddddddddddddddddddddddddddddddddddddddd"<<std::endl;
   state->printTransforms();
-  // double ang = -0.1;
-  // state->setJointPositions("shoulder_lift_joint", &ang);
-  // state->update();
-  // {
-  //   std::cout<<"BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB"<<std::endl;
-  //   const auto& links = model->getLinkModels();
-  //   for(const auto& link : links)
-  //   {
-  //     const auto& shap = link->getShapes();
-  //     std::cout << "shap size = " << shap.size() << std::endl;
-  //     const auto& trans = state->getGlobalLinkTransform(link);
-  //     const Eigen::Matrix3d& m = trans.rotation();
-  //     const Eigen::Vector3d& v = trans.translation();
-  //     std::cout << "Rotation: " << std::endl << m << std::endl;
-  //     std::cout << "Translation: " << std::endl << v << std::endl;
-  //     link_poses.push_back(trans);
-  //   }
-  //   link_poses_.push_back(link_poses);
-  //   link_poses.clear();
-  //   std::cout<<"BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB"<<std::endl;
-  // }
-  // std::cout<<"eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"<<std::endl;
-  // state->printTransforms();
-  // ang = 0.1;
-  // state->setJointPositions("shoulder_lift_joint", &ang);
-  // state->update();
-  // std::cout<<"ffffffffffffffffffffffffffffffffffffffffffffffffffff"<<std::endl;
-  // state->printTransforms();
-
-  // {
-  //   std::cout<<"DDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD"<<std::endl;
-  //   const auto links = model->getLinkModels();
-  //   for(const auto link : links)
-  //   {
-  //     const auto& shap = link->getShapes();
-  //     std::cout << "shap size = " << shap.size() << std::endl;
-  //     const auto& trans = state->getGlobalLinkTransform(link);
-  //     const Eigen::Matrix3d& m = trans.rotation();
-  //     const Eigen::Vector3d& v = trans.translation();
-  //     std::cout << "Rotation: " << std::endl << m << std::endl;
-  //     std::cout << "Translation: " << std::endl << v << std::endl;
-  //     link_poses.push_back(trans);
-  //   }
-  //   link_poses_.push_back(link_poses);
-  //   link_poses.clear();
-  //   std::cout<<"DDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD"<<std::endl;
-  // }
-  // std::cout<<"size of link_poses = "<<link_poses_.size()<<" x "<<link_poses_[0].size()<<std::endl;
 
   for(const auto& link : model->getLinkModels())
   {
@@ -187,8 +142,10 @@ bool SceneBuffer::get_obstacle_cb(
     };
 
   const auto& check_last_time = 
-    [&get_tarj_start_time, &tarj_last_time](const rclcpp::Time& t, const auto& traj){
-      return get_tarj_start_time(traj).nanoseconds() > 0 && t > tarj_last_time(traj);
+    [&get_tarj_start_time, &tarj_last_time](
+      const rclcpp::Time& t, const rclcpp::Duration& delay_time, const auto& traj){
+      return (get_tarj_start_time(traj).nanoseconds() > 
+        0 && t > tarj_last_time(traj) + delay_time);
     };
 
   const auto& check_running_time_with_delay = 
@@ -210,6 +167,21 @@ bool SceneBuffer::get_obstacle_cb(
     return false;
   }
 
+  const auto try_to_set_some_one_is_planning = [this](const std::string& name){
+    const std::lock_guard<std::mutex> planning_lock(some_one_is_planning_mutex_);
+    if(some_one_is_planning_ == ""){
+      some_one_is_planning_ = name;
+      return true;
+    }else{
+      return false;
+    }
+  };
+
+  while(!try_to_set_some_one_is_planning(req_robot_name)){
+    std::this_thread::sleep_for(std::chrono::milliseconds(50));
+    RCLCPP_INFO(get_logger(), "Waiting for other planning");
+  }
+
   const rclcpp::Time start_time(
     rclcpp::Time(req->header.stamp) + rclcpp::Duration(req->run_after));
 
@@ -220,11 +192,13 @@ bool SceneBuffer::get_obstacle_cb(
 
   for(const auto& other_name : collision_robots)
   {
+    const std::lock_guard<std::mutex> data_lock(trajectory_data_mutex_);
+
     const auto& other_robot = robots_.at(other_name);
     other_robot->clean_poses();
 
     if(other_robot->running_trajectory && 
-      check_last_time(start_time, other_robot->running_trajectory))
+      check_last_time(start_time, *delay_duration_, other_robot->running_trajectory))
     {
       other_robot->running_trajectory = nullptr;
     }
@@ -355,6 +329,16 @@ bool SceneBuffer::set_trajectory_cb(
   const std::shared_ptr<TrajectorySrv::Request> req,
   std::shared_ptr<TrajectorySrv::Response> res)
 {
+  const auto try_to_release_some_one_is_planning = [this](const std::string& name){
+    const std::lock_guard<std::mutex> planning_lock(some_one_is_planning_mutex_);
+    if(some_one_is_planning_ == name){
+      some_one_is_planning_ = "";
+    }else{
+      throw std::runtime_error("mutex name not the same when try to release, mutex name: '" + 
+        some_one_is_planning_ + "', try to release '" + name + "'.");
+    }
+  };
+
   const std::string req_robot_name = [](std::string& robot_name){
     if(robot_name.size() > 1 && robot_name.at(0) == '/'){
       return std::string(robot_name.begin() + 1, robot_name.end());
@@ -362,6 +346,8 @@ bool SceneBuffer::set_trajectory_cb(
       return robot_name;
     }
   }(req->header.frame_id);
+
+  const std::lock_guard<std::mutex> data_lock(trajectory_data_mutex_);
 
   rclcpp::Time t;
 
@@ -372,6 +358,11 @@ bool SceneBuffer::set_trajectory_cb(
   case TrajectorySrv::Request::SET_PLANNED_TRAJECTORY:
     robot->planned_trajectory = 
       std::make_shared<TrajectoryMsg>(std::move(req->trajectory));
+    try_to_release_some_one_is_planning(req_robot_name);
+    break;
+
+  case TrajectorySrv::Request::PLANNING_FAILED:
+    try_to_release_some_one_is_planning(req_robot_name);
     break;
 
   case TrajectorySrv::Request::MARK_TRAJECTORY_START_TIME:

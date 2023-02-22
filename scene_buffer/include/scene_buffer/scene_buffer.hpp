@@ -1,3 +1,6 @@
+#include <mutex>
+#include <thread>
+
 #include <rclcpp/rclcpp.hpp>
 
 #include <geometric_shapes/check_isometry.h>
@@ -102,6 +105,11 @@ private:
   using ParamListener = scene_buffer::ParamListener;
   std::shared_ptr<ParamListener> param_listener_;
   Params params_;
+  
+  std::string some_one_is_planning_;
+  std::mutex trajectory_data_mutex_;
+  std::mutex some_one_is_planning_mutex_;
+  rclcpp::CallbackGroup::SharedPtr cb_group_;
 
   std::unique_ptr<rclcpp::Duration> delay_duration_;
   std::map<std::string, std::shared_ptr<Robot>> robots_;

@@ -1,4 +1,5 @@
 #include <rclcpp/rclcpp.hpp>
+#include <rclcpp/executors.hpp>
 #include "scene_buffer/scene_buffer.hpp"
 
 int main(int argc, char** argv)
@@ -9,8 +10,10 @@ int main(int argc, char** argv)
   auto scene_buffer_node = std::make_shared<
     SceneBuffer>("scene_buffer", node_options);
   scene_buffer_node->init();
-  
-  rclcpp::spin(scene_buffer_node);
+
+  rclcpp::executors::MultiThreadedExecutor executor;
+  executor.add_node(scene_buffer_node);
+  executor.spin();
   rclcpp::shutdown();
   return 0;
 }
