@@ -23,6 +23,7 @@
   <depend>geometric_shapes</depend>
   <depend>moveit_core</depend>
   <depend>generate_parameter_library</depend>
+  <depend>visualization_msgs</depend>
 
 
   <export>

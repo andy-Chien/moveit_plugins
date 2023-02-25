@@ -15,6 +15,11 @@ scene_buffer:
       gt_eq<>: [ 0.0 ]
     }
   }
+  pub_obstacles: {
+    type: bool,
+    default_value: false,
+    description: "pub obstacles mesh to rviz"
+  }
   delay_duration: {
     type: double,
     default_value: 0.1,

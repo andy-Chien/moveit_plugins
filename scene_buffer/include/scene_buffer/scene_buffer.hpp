@@ -7,6 +7,7 @@
 #include <moveit/robot_model/robot_model.h>
 #include <moveit/robot_state/robot_state.h>
 #include <moveit/robot_model_loader/robot_model_loader.h>
+#include <visualization_msgs/msg/marker_array.hpp>
 #include <trajectory_msgs/msg/joint_trajectory.hpp>
 #include <sensor_msgs/msg/joint_state.h>
 #include <memory>
@@ -20,6 +21,9 @@ class SceneBuffer : public rclcpp::Node
 {
 public:
   using TrajectoryMsg = trajectory_msgs::msg::JointTrajectory;
+  using ObstacleSrv = mr_msgs::srv::GetRobotTrajectoryObstacle;
+  using TrajectorySrv = mr_msgs::srv::SetTrajectoryState;
+  using MarkerArray = visualization_msgs::msg::MarkerArray;
 
   SceneBuffer(const std::string& node_name, const rclcpp::NodeOptions& node_options);
   void init();
@@ -32,6 +36,9 @@ public:
     {
       obstacles.name = robot_name + "_trajectory_obstacles";
       load_robot(robot_name);
+
+      obstacles_publisher_ = node->create_publisher<MarkerArray>(
+        robot_name + "/visualization_marker_array", 1);
 
       jnt_states_sub_ = node->create_subscription<sensor_msgs::msg::JointState>(
         robot_name + "/joint_states", 1, 
@@ -62,6 +69,8 @@ public:
       }
     }
 
+    void pub_obstacles(const Robot& other) const;
+
     moveit::core::RobotModelPtr model;
     moveit::core::RobotStatePtr state;
     mr_msgs::msg::Obstacles obstacles;
@@ -84,13 +93,10 @@ public:
     std::vector<std::string> jnt_names_;
     rclcpp::AsyncParametersClient::SharedPtr param_client_;
     rclcpp::Subscription<sensor_msgs::msg::JointState>::SharedPtr jnt_states_sub_;
+    rclcpp::Publisher<MarkerArray>::SharedPtr obstacles_publisher_;
   };
 
 private:
-
-  using ObstacleSrv = mr_msgs::srv::GetRobotTrajectoryObstacle;
-  using TrajectorySrv = mr_msgs::srv::SetTrajectoryState;
-
   bool get_obstacle_cb(
     const std::shared_ptr<ObstacleSrv::Request> req,
     std::shared_ptr<ObstacleSrv::Response> res);
@@ -98,8 +104,6 @@ private:
   bool set_trajectory_cb(
     const std::shared_ptr<TrajectorySrv::Request> req,
     std::shared_ptr<TrajectorySrv::Response> res);
-  
-
 
   using Params = scene_buffer::Params;
   using ParamListener = scene_buffer::ParamListener;

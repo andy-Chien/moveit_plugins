@@ -101,6 +101,57 @@ void SceneBuffer::Robot::load_robot(const std::string& urdf, const std::string& 
   }
 }
 
+void SceneBuffer::Robot::pub_obstacles(const Robot& other) const
+{
+  
+
+  const auto& obs = other.obstacles;
+  const auto& links = other.mesh_links;
+  const auto time_now = node_->get_clock()->now();
+
+  MarkerArray msg;
+
+  int num_obs = 0;
+  for(const auto& poses : obs.meshes_poses){
+    num_obs += poses.poses.size();
+  }
+  msg.markers.reserve(num_obs);
+
+  for(size_t i=0; i<links.size(); i++)
+  {
+    const std::string& mesh_file_name = links[i]->getVisualMeshFilename();
+    const std::string& link_name = links[i]->getName();
+    int id = 0;
+    for(const auto& pose : obs.meshes_poses[i].poses)
+    {
+      visualization_msgs::msg::Marker marker;
+      marker.header.stamp = time_now;
+      marker.header.frame_id = "world";
+      marker.ns = link_name;
+      marker.id = id++;
+      marker.type = visualization_msgs::msg::Marker::MESH_RESOURCE;
+      marker.action = visualization_msgs::msg::Marker::ADD;
+      marker.lifetime = rclcpp::Duration(std::chrono::seconds(3));
+      marker.frame_locked = false;
+      marker.mesh_resource = mesh_file_name;
+      marker.mesh_use_embedded_materials = true;
+      marker.pose.position.x = pose.pose[0];
+      marker.pose.position.y = pose.pose[1];
+      marker.pose.position.z = pose.pose[2];
+      marker.pose.orientation.w = pose.pose[3];
+      marker.pose.orientation.x = pose.pose[4];
+      marker.pose.orientation.y = pose.pose[5];
+      marker.pose.orientation.z = pose.pose[6];
+      marker.scale.x = 1;
+      marker.scale.y = 1;
+      marker.scale.z = 1;
+      msg.markers.emplace_back(std::move(marker));
+    }
+  }
+  obstacles_publisher_->publish(msg);
+}
+
+
 bool SceneBuffer::get_obstacle_cb(
   const std::shared_ptr<ObstacleSrv::Request> req,
   std::shared_ptr<ObstacleSrv::Response> res)
@@ -230,6 +281,11 @@ bool SceneBuffer::get_obstacle_cb(
       get_link_poses_from_state(other_robot);
     }
     res->obstacles_list.push_back(other_robot->obstacles);
+  }
+  if(params_.pub_obstacles){
+    for(const auto& other_name : collision_robots){
+      robots_.at(req_robot_name)->pub_obstacles(*robots_.at(other_name));
+    }
   }
   rclcpp::Time t2 = this->now();
   std::cout<<"get_obstacle_cb end time = "<<(t2 - t1).seconds()<<std::endl;

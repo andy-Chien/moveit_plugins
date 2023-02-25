@@ -5,6 +5,8 @@ scene_buffer:
       - robot_2
     
     padding: 0.05
+    delay_duration: 0.2
+    pub_obstacles: true
 
     collision_maps:
       robot_1:
