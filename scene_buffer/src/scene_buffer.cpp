@@ -145,6 +145,10 @@ void SceneBuffer::Robot::pub_obstacles(const Robot& other) const
       marker.scale.x = 1;
       marker.scale.y = 1;
       marker.scale.z = 1;
+      marker.color.r = 0.8;
+      marker.color.g = 0.8;
+      marker.color.b = 0.8;
+      marker.color.a = 0.1;
       msg.markers.emplace_back(std::move(marker));
     }
   }
@@ -182,12 +186,13 @@ bool SceneBuffer::get_obstacle_cb(
 
   const auto& get_link_poses_from_state = 
     [&eigen_to_msg](const std::shared_ptr<Robot>& robot){
+      const moveit::core::RobotStateConstPtr const_state(robot->state);
       for(size_t i=0; i<robot->mesh_links.size(); i++){
-        const auto& trans = robot->state->getGlobalLinkTransform(robot->mesh_links[i]);
+        const auto& trans = const_state->getCollisionBodyTransform(robot->mesh_links[i], 0);
         robot->obstacles.meshes_poses[i].poses.push_back(eigen_to_msg(trans));
       }
       for(size_t i=0; i<robot->prim_links.size(); i++){
-        const auto& trans = robot->state->getGlobalLinkTransform(robot->prim_links[i]);
+        const auto& trans = const_state->getCollisionBodyTransform(robot->prim_links[i], 0);
         robot->obstacles.primitives_poses[i].poses.push_back(eigen_to_msg(trans));
       }
     };
