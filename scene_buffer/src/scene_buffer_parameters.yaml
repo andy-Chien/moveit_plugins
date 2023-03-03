@@ -20,6 +20,14 @@ scene_buffer:
     default_value: false,
     description: "pub obstacles mesh to rviz"
   }
+  obstacle_pub_step: {
+    type: int,
+    default_value: 1,
+    description: "padding for the trajectory obstacles",
+    validation: {
+      gt_eq<>: [1]
+    }
+  }
   delay_duration: {
     type: double,
     default_value: 0.1,

@@ -92,6 +92,7 @@ void SceneBuffer::Robot::load_robot(const std::string& urdf, const std::string& 
       prim_links.push_back(link);
     }
   }
+  obstacles.header.frame_id = "world";
   obstacles.meshes_poses.resize(mesh_links.size());
   obstacles.primitives_poses.resize(prim_links.size());
 
@@ -101,7 +102,7 @@ void SceneBuffer::Robot::load_robot(const std::string& urdf, const std::string& 
   }
 }
 
-void SceneBuffer::Robot::pub_obstacles(const Robot& other) const
+void SceneBuffer::Robot::pub_obstacles(const Robot& other, const uint8_t step) const
 {
   
 
@@ -111,7 +112,7 @@ void SceneBuffer::Robot::pub_obstacles(const Robot& other) const
 
   MarkerArray msg;
 
-  int num_obs = 0;
+  size_t num_obs = 0;
   for(const auto& poses : obs.meshes_poses){
     num_obs += poses.poses.size();
   }
@@ -121,14 +122,17 @@ void SceneBuffer::Robot::pub_obstacles(const Robot& other) const
   {
     const std::string& mesh_file_name = links[i]->getVisualMeshFilename();
     const std::string& link_name = links[i]->getName();
-    int id = 0;
-    for(const auto& pose : obs.meshes_poses[i].poses)
+    for(size_t id=0; id < obs.meshes_poses[i].poses.size(); id++)
     {
+      if(id % step != 0 && id != obs.meshes_poses[i].poses.size() - 1){
+        continue;
+      }
+      const auto& pose = obs.meshes_poses[i].poses[id];
       visualization_msgs::msg::Marker marker;
       marker.header.stamp = time_now;
       marker.header.frame_id = "world";
       marker.ns = link_name;
-      marker.id = id++;
+      marker.id = id;
       marker.type = visualization_msgs::msg::Marker::MESH_RESOURCE;
       marker.action = visualization_msgs::msg::Marker::ADD;
       marker.lifetime = rclcpp::Duration(std::chrono::seconds(3));
@@ -148,7 +152,7 @@ void SceneBuffer::Robot::pub_obstacles(const Robot& other) const
       marker.color.r = 0.8;
       marker.color.g = 0.8;
       marker.color.b = 0.8;
-      marker.color.a = 0.1;
+      marker.color.a = 0.2;
       msg.markers.emplace_back(std::move(marker));
     }
   }
@@ -293,7 +297,7 @@ bool SceneBuffer::get_obstacle_cb(
   }
   if(params_.pub_obstacles){
     for(const auto& other_name : collision_robots){
-      robots_.at(req_robot_name)->pub_obstacles(*robots_.at(other_name));
+      robots_.at(req_robot_name)->pub_obstacles(*robots_.at(other_name), params_.obstacle_pub_step);
     }
   }
   rclcpp::Time t2 = this->now();

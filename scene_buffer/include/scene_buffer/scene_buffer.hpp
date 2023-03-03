@@ -71,7 +71,7 @@ public:
       }
     }
 
-    void pub_obstacles(const Robot& other) const;
+    void pub_obstacles(const Robot& other, const uint8_t step) const;
 
     moveit::core::RobotModelPtr model;
     moveit::core::RobotStatePtr state;

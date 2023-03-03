@@ -125,7 +125,7 @@ void ompl_interface::ModelBasedPlanningContext::configure(const rclcpp::Node::Sh
     spec_.state_space_->copyToOMPLState(ompl_start_state.get(), getCompleteInitialRobotState());
     ompl_simple_setup_->setStartState(ompl_start_state);
     ompl_simple_setup_->setStateValidityChecker(std::make_shared<ConstrainedPlanningStateValidityChecker>(this));
-    ompl_simple_setup_->getSpaceInformation()->setMotionValidator(std::make_shared<MotionValidityChecker>(this));
+    // ompl_simple_setup_->getSpaceInformation()->setMotionValidator(std::make_shared<MotionValidityChecker>(this));
   }
   else
   {
@@ -134,7 +134,7 @@ void ompl_interface::ModelBasedPlanningContext::configure(const rclcpp::Node::Sh
     spec_.state_space_->copyToOMPLState(ompl_start_state.get(), getCompleteInitialRobotState());
     ompl_simple_setup_->setStartState(ompl_start_state);
     ompl_simple_setup_->setStateValidityChecker(std::make_shared<StateValidityChecker>(this));
-    ompl_simple_setup_->getSpaceInformation()->setMotionValidator(std::make_shared<MotionValidityChecker>(this));
+    // ompl_simple_setup_->getSpaceInformation()->setMotionValidator(std::make_shared<MotionValidityChecker>(this));
   }
 
   if (path_constraints_ && constraints_library_)
