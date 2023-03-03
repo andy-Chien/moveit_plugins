@@ -43,6 +43,7 @@ public:
       jnt_states_sub_ = node->create_subscription<sensor_msgs::msg::JointState>(
         robot_name + "/joint_states", 1, 
         [this](const sensor_msgs::msg::JointState::SharedPtr msg) -> void {
+          const std::lock_guard<std::shared_mutex> data_lock(jnt_data_mutex_);
           if(jnt_names_.size() != msg->name.size()){
             jnt_names_ = msg->name;
           }
@@ -53,6 +54,7 @@ public:
 
     void update_to_current()
     {
+      const std::shared_lock<std::shared_mutex> data_lock(jnt_data_mutex_);
       for(size_t i=0; i<jnt_names_.size(); i++){
         state->setJointPositions(jnt_names_.at(i), &(jnt_pos_[i]));
       }
@@ -91,6 +93,7 @@ public:
     
     std::vector<double> jnt_pos_;
     std::vector<std::string> jnt_names_;
+    std::shared_mutex jnt_data_mutex_;
     rclcpp::AsyncParametersClient::SharedPtr param_client_;
     rclcpp::Subscription<sensor_msgs::msg::JointState>::SharedPtr jnt_states_sub_;
     rclcpp::Publisher<MarkerArray>::SharedPtr obstacles_publisher_;
@@ -111,8 +114,8 @@ private:
   Params params_;
   
   std::string some_one_is_planning_;
-  std::mutex trajectory_data_mutex_;
   std::mutex some_one_is_planning_mutex_;
+  std::shared_mutex trajectory_data_mutex_;
   rclcpp::CallbackGroup::SharedPtr cb_group_;
 
   std::unique_ptr<rclcpp::Duration> delay_duration_;

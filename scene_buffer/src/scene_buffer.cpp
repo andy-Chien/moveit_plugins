@@ -248,16 +248,20 @@ bool SceneBuffer::get_obstacle_cb(
 
   for(const auto& other_name : collision_robots)
   {
-    const std::lock_guard<std::mutex> data_lock(trajectory_data_mutex_);
 
     const auto& other_robot = robots_.at(other_name);
     other_robot->clean_poses();
 
-    if(other_robot->running_trajectory && 
-      check_last_time(start_time, *delay_duration_, other_robot->running_trajectory))
     {
-      other_robot->running_trajectory = nullptr;
+      const std::lock_guard<std::shared_mutex> data_lock(trajectory_data_mutex_);
+      if(other_robot->running_trajectory && 
+        check_last_time(start_time, *delay_duration_, other_robot->running_trajectory))
+      {
+        other_robot->running_trajectory = nullptr;
+      }
     }
+
+    const std::shared_lock<std::shared_mutex> data_lock(trajectory_data_mutex_);
 
     if(!(other_robot->planned_trajectory || other_robot->running_trajectory))
     {
@@ -408,7 +412,7 @@ bool SceneBuffer::set_trajectory_cb(
     }
   }(req->header.frame_id);
 
-  const std::lock_guard<std::mutex> data_lock(trajectory_data_mutex_);
+  const std::lock_guard<std::shared_mutex> data_lock(trajectory_data_mutex_);
 
   rclcpp::Time t;
 
