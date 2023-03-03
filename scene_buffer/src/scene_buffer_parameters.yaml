@@ -36,6 +36,46 @@ scene_buffer:
       gt_eq<>: [ 0.0 ]
     }
   }
+  pos_diff_min: {
+    type: double,
+    default_value: 0.02,
+    description: "the minimum distance of two obstacle, lower than this will be ignored",
+    validation: {
+      gt_eq<>: [ 0.0 ]
+    }
+  }
+  pos_diff_max: {
+    type: double,
+    default_value: 0.04,
+    description: "the maximum distance of two obstacle, upper than this will be interpolated",
+    validation: {
+      gt_eq<>: [ 0.0 ]
+    }
+  }
+  rot_diff_min: {
+    type: double,
+    default_value: 0.002,
+    description: "the minimum rotation difference of two obstacle, lower than this will be ignored",
+    validation: {
+      gt_eq<>: [ 0.0 ]
+    }
+  }
+  rot_diff_max: {
+    type: double,
+    default_value: 0.006,
+    description: "the maximum rotation difference of two obstacle, upper than this will be interpolated",
+    validation: {
+      gt_eq<>: [ 0.0 ]
+    }
+  }
+  delay_duration: {
+    type: double,
+    default_value: 0.1,
+    description: "delay the timing to ignore the trajectory point",
+    validation: {
+      gt_eq<>: [ 0.0 ]
+    }
+  }
   collision_maps:
     __map_robot_names: 
       collision_robots: {
