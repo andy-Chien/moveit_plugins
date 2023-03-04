@@ -161,6 +161,7 @@ public:
     // (*planning_scene_)->allocateCollisionDetector(collision_detection::CollisionDetectorAllocatorFCL::create());
     
     if(!planner(*planning_scene_, req, res)){
+      std::cout<<"res.error_code_.val = "<<res.error_code_.val<<std::endl;
       set_trajectory_state(false);
       return clear_and_return(false);
     }
