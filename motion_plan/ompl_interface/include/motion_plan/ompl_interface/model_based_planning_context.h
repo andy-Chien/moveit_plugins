@@ -43,7 +43,8 @@
 
 #include <ompl/geometric/SimpleSetup.h>
 #include <ompl/tools/benchmark/Benchmark.h>
-#include <ompl/tools/multiplan/ParallelPlan.h>
+// #include <ompl/tools/multiplan/ParallelPlan.h>
+#include "motion_plan/ompl/tools/parallel_plan_with_return.h"
 #include <ompl/base/StateStorage.h>
 #include <ompl/base/spaces/constraint/ConstrainedStateSpace.h>
 
@@ -389,7 +390,7 @@ protected:
   void unregisterTerminationCondition();
 
   /** \brief Convert OMPL PlannerStatus to moveit_msgs::msg::MoveItErrorCode */
-  int32_t logPlannerStatus(og::SimpleSetupPtr ompl_simple_setup);
+  int32_t logPlannerStatus(ompl::base::PlannerStatus ompl_status);
 
   ModelBasedPlanningContextSpecification spec_;
 
@@ -402,7 +403,7 @@ protected:
   ot::Benchmark ompl_benchmark_;
 
   /// tool used to compute multiple plans in parallel; this uses the problem definition maintained by ompl_simple_setup_
-  ot::ParallelPlan ompl_parallel_plan_;
+  ot::ParallelPlanWithReturn ompl_parallel_plan_;
 
   std::vector<int> space_signature_;
 

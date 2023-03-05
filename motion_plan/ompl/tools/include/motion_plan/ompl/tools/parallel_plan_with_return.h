@@ -34,8 +34,8 @@
 
 /* Author: Ioan Sucan */
 
-#ifndef OMPL_TOOLS_MULTIPLAN_PARALLEL_PLAN_
-#define OMPL_TOOLS_MULTIPLAN_PARALLEL_PLAN_
+#ifndef OMPL_TOOLS_MULTIPLAN_PARALLEL_PLAN_WITH_RETURN_
+#define OMPL_TOOLS_MULTIPLAN_PARALLEL_PLAN_WITH_RETURN_
 
 #include "ompl/base/Planner.h"
 #include "ompl/geometric/PathGeometric.h"
@@ -53,7 +53,7 @@ namespace ompl
     namespace tools
     {
         /// @cond IGNORE
-        OMPL_CLASS_FORWARD(ParallelPlan);
+        OMPL_CLASS_FORWARD(ParallelPlanWithReturn);
         /// @endcond
 
         /** \brief This is a utility that allows executing multiple
@@ -63,13 +63,13 @@ namespace ompl
             solve(), the set of known solutions (maintained by
             ompl::base::Goal) are not cleared, and neither is the
             hybridization datastructure.*/
-        class ParallelPlan
+        class ParallelPlanWithReturn
         {
         public:
             /** \brief Create an instance for a specified space information */
-            ParallelPlan(const base::ProblemDefinitionPtr &pdef);
+            ParallelPlanWithReturn(const base::ProblemDefinitionPtr &pdef);
 
-            virtual ~ParallelPlan();
+            virtual ~ParallelPlanWithReturn();
 
             /** \brief Add a planner to use. */
             void addPlanner(const base::PlannerPtr &planner);
@@ -136,12 +136,14 @@ namespace ompl
         protected:
             /** \brief Run the planner and call ompl::base::PlannerTerminationCondition::terminate() for the other
              * planners once a first solution is found */
-            void solveOne(base::Planner *planner, std::size_t minSolCount,
-                          const base::PlannerTerminationCondition *ptc);
+            ompl::base::PlannerStatus solveOne(
+                base::Planner *planner, std::size_t minSolCount,
+                const base::PlannerTerminationCondition *ptc);
 
             /** \brief Run the planner and collect the solutions. This function is only called if hybridize_ is true. */
-            void solveMore(base::Planner *planner, std::size_t minSolCount, std::size_t maxSolCount,
-                           const base::PlannerTerminationCondition *ptc);
+            ompl::base::PlannerStatus solveMore(
+                base::Planner *planner, std::size_t minSolCount, std::size_t maxSolCount,
+                const base::PlannerTerminationCondition *ptc);
 
             /** \brief The problem definition used */
             base::ProblemDefinitionPtr pdef_;

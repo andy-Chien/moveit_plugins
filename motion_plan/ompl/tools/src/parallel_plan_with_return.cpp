@@ -34,91 +34,63 @@
 
 /* Author: Ioan Sucan */
 
-#include "motion_plan/ompl/tools/parallel_plan.h"
+#include "motion_plan/ompl/tools/parallel_plan_with_return.h"
 #include <ompl/geometric/PathHybridization.h>
+#include <algorithm>
 #include <thread>
+#include <future>
 
-ompl::tools::ParallelPlan::ParallelPlan(const base::ProblemDefinitionPtr &pdef)
+ompl::tools::ParallelPlanWithReturn::ParallelPlanWithReturn(const base::ProblemDefinitionPtr &pdef)
   : pdef_(pdef), phybrid_(std::make_shared<geometric::PathHybridization>(pdef->getSpaceInformation()))
 {
-    std::cout<<"!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!ParallelPlan!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"<<std::endl;
-    std::cout<<"!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!ParallelPlan!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"<<std::endl;
-    std::cout<<"!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!ParallelPlan!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"<<std::endl;
-    std::cout<<"!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!ParallelPlan!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"<<std::endl;
-    std::cout<<"!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!ParallelPlan!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"<<std::endl;
-    std::cout<<"!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!ParallelPlan!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"<<std::endl;
-    std::cout<<"!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!ParallelPlan!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"<<std::endl;
-    std::cout<<"!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!ParallelPlan!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"<<std::endl;
-    std::cout<<"!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!ParallelPlan!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"<<std::endl;
-    std::cout<<"!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!ParallelPlan!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"<<std::endl;
 }
 
-ompl::tools::ParallelPlan::~ParallelPlan() = default;
+ompl::tools::ParallelPlanWithReturn::~ParallelPlanWithReturn() = default;
 
-void ompl::tools::ParallelPlan::addPlanner(const base::PlannerPtr &planner)
+void ompl::tools::ParallelPlanWithReturn::addPlanner(const base::PlannerPtr &planner)
 {
     if (planner && planner->getSpaceInformation().get() != pdef_->getSpaceInformation().get())
         throw Exception("Planner instance does not match space information");
     if (planner->getProblemDefinition().get() != pdef_.get())
         planner->setProblemDefinition(pdef_);
     planners_.push_back(planner);
-    std::cout<<"!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!addPlanner!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"<<std::endl;
-    std::cout<<"!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!addPlanner!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"<<std::endl;
-    std::cout<<"!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!addPlanner!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"<<std::endl;
-    std::cout<<"!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!addPlanner!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"<<std::endl;
-    std::cout<<"!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!addPlanner!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"<<std::endl;
-    std::cout<<"!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!addPlanner!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"<<std::endl;
-    std::cout<<"!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!addPlanner!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"<<std::endl;
-    std::cout<<"!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!addPlanner!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"<<std::endl;
-    std::cout<<"!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!addPlanner!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"<<std::endl;
-    std::cout<<"!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!addPlanner!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"<<std::endl;
 }
 
-void ompl::tools::ParallelPlan::addPlannerAllocator(const base::PlannerAllocator &pa)
+void ompl::tools::ParallelPlanWithReturn::addPlannerAllocator(const base::PlannerAllocator &pa)
 {
     base::PlannerPtr planner = pa(pdef_->getSpaceInformation());
     planner->setProblemDefinition(pdef_);
     planners_.push_back(planner);
-    std::cout<<"!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!addPlannerAllocator!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"<<std::endl;
-    std::cout<<"!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!addPlannerAllocator!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"<<std::endl;
-    std::cout<<"!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!addPlannerAllocator!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"<<std::endl;
-    std::cout<<"!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!addPlannerAllocator!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"<<std::endl;
-    std::cout<<"!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!addPlannerAllocator!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"<<std::endl;
-    std::cout<<"!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!addPlannerAllocator!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"<<std::endl;
-    std::cout<<"!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!addPlannerAllocator!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"<<std::endl;
-    std::cout<<"!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!addPlannerAllocator!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"<<std::endl;
-    std::cout<<"!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!addPlannerAllocator!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"<<std::endl;
-    std::cout<<"!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!addPlannerAllocator!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"<<std::endl;
 }
 
-void ompl::tools::ParallelPlan::clearPlanners()
+void ompl::tools::ParallelPlanWithReturn::clearPlanners()
 {
     planners_.clear();
 }
 
-void ompl::tools::ParallelPlan::clearHybridizationPaths()
+void ompl::tools::ParallelPlanWithReturn::clearHybridizationPaths()
 {
     phybrid_->clear();
 }
 
-ompl::base::PlannerStatus ompl::tools::ParallelPlan::solve(double solveTime, bool hybridize)
+ompl::base::PlannerStatus ompl::tools::ParallelPlanWithReturn::solve(double solveTime, bool hybridize)
 {
     return solve(solveTime, 1, planners_.size(), hybridize);
 }
 
-ompl::base::PlannerStatus ompl::tools::ParallelPlan::solve(double solveTime, std::size_t minSolCount,
+ompl::base::PlannerStatus ompl::tools::ParallelPlanWithReturn::solve(double solveTime, std::size_t minSolCount,
                                                            std::size_t maxSolCount, bool hybridize)
 {
     return solve(base::timedPlannerTerminationCondition(solveTime, std::min(solveTime / 100.0, 0.1)), minSolCount,
                  maxSolCount, hybridize);
 }
 
-ompl::base::PlannerStatus ompl::tools::ParallelPlan::solve(const base::PlannerTerminationCondition &ptc, bool hybridize)
+ompl::base::PlannerStatus ompl::tools::ParallelPlanWithReturn::solve(const base::PlannerTerminationCondition &ptc, bool hybridize)
 {
     return solve(ptc, 1, planners_.size(), hybridize);
 }
 
-ompl::base::PlannerStatus ompl::tools::ParallelPlan::solve(const base::PlannerTerminationCondition &ptc,
+ompl::base::PlannerStatus ompl::tools::ParallelPlanWithReturn::solve(const base::PlannerTerminationCondition &ptc,
                                                            std::size_t minSolCount, std::size_t maxSolCount,
                                                            bool hybridize)
 {
@@ -127,26 +99,30 @@ ompl::base::PlannerStatus ompl::tools::ParallelPlan::solve(const base::PlannerTe
     foundSolCount_ = 0;
 
     time::point start = time::now();
-    std::vector<std::thread *> threads(planners_.size());
+    std::vector<std::future<ompl::base::PlannerStatus>> futures;
+    futures.reserve(planners_.size());
 
     // Decide if we are combining solutions or just taking the first one
     if (hybridize)
-        for (std::size_t i = 0; i < threads.size(); ++i)
-            threads[i] = new std::thread([this, i, minSolCount, maxSolCount, &ptc]
-                                         {
-                                             solveMore(planners_[i].get(), minSolCount, maxSolCount, &ptc);
-                                         });
-    else
-        for (std::size_t i = 0; i < threads.size(); ++i)
-            threads[i] = new std::thread([this, i, minSolCount, &ptc]
-                                         {
-                                             solveOne(planners_[i].get(), minSolCount, &ptc);
-                                         });
-
-    for (auto &thread : threads)
     {
-        thread->join();
-        delete thread;
+        for (std::size_t i = 0; i < planners_.size(); ++i)
+            futures.emplace_back(std::async([this, i, minSolCount, maxSolCount, &ptc]{
+                return solveMore(planners_[i].get(), minSolCount, maxSolCount, &ptc);
+            })
+        );
+    }
+    else
+    {
+        for (std::size_t i = 0; i < planners_.size(); ++i)
+            futures.emplace_back(std::async([this, i, minSolCount, &ptc]{
+                return solveOne(planners_[i].get(), minSolCount, &ptc);
+            })
+        );
+    }
+    std::vector<ompl::base::PlannerStatus> status;
+    status.reserve(futures.size());
+    for (auto &future : futures){
+        status.emplace_back(future.get());
     }
 
     if (hybridize)
@@ -167,19 +143,37 @@ ompl::base::PlannerStatus ompl::tools::ParallelPlan::solve(const base::PlannerTe
     else
         OMPL_WARN("ParallelPlan::solve(): Unable to find solution by any of the threads in %f seconds",
                   time::seconds(time::now() - start));
-    return ompl::base::PlannerStatus::TIMEOUT;
-    // return {pdef_->hasSolution(), pdef_->hasApproximateSolution()};
+    
+    using ps = ompl::base::PlannerStatus;
+    ps result({pdef_->hasSolution(), pdef_->hasApproximateSolution()});
+    if(result == ps::TIMEOUT)
+    {
+        if(std::find(status.begin(), status.end(), ps::INVALID_START) != status.end()){
+            result = ps::INVALID_START;
+        }else if(std::find(status.begin(), status.end(), ps::INVALID_GOAL) != status.end()){
+            result = ps::INVALID_GOAL;
+        }else if(std::find(status.begin(), status.end(), ps::UNRECOGNIZED_GOAL_TYPE) != status.end()){
+            result = ps::UNRECOGNIZED_GOAL_TYPE;
+        }
+    }
+    std::cout<<"ParallelPlanWithReturn result = ";
+    for(const auto& st : status){
+        std::cout<<st<<", ";
+    }
+    std::cout<<std::endl;
+    return result;
 }
 
-void ompl::tools::ParallelPlan::solveOne(base::Planner *planner, std::size_t minSolCount,
-                                         const base::PlannerTerminationCondition *ptc)
+ompl::base::PlannerStatus ompl::tools::ParallelPlanWithReturn::solveOne(
+    base::Planner *planner, std::size_t minSolCount, const base::PlannerTerminationCondition *ptc)
 {
     OMPL_DEBUG("ParallelPlan.solveOne starting planner %s", planner->getName().c_str());
 
     time::point start = time::now();
     try
     {
-        if (planner->solve(*ptc))
+        const ompl::base::PlannerStatus result = planner->solve(*ptc);
+        if (result)
         {
             double duration = time::seconds(time::now() - start);
             foundSolCountLock_.lock();
@@ -189,22 +183,25 @@ void ompl::tools::ParallelPlan::solveOne(base::Planner *planner, std::size_t min
                 ptc->terminate();
             OMPL_DEBUG("ParallelPlan.solveOne: Solution found by %s in %lf seconds", planner->getName().c_str(), duration);
         }
+        return result;
     }
     catch (Exception &e)
     {
         OMPL_ERROR("Exception thrown during ParrallelPlan::solveOne: %s", e.what());
+        return ompl::base::PlannerStatus::UNKNOWN;
     }
 }
 
-void ompl::tools::ParallelPlan::solveMore(base::Planner *planner, std::size_t minSolCount, std::size_t maxSolCount,
-                                          const base::PlannerTerminationCondition *ptc)
+ompl::base::PlannerStatus ompl::tools::ParallelPlanWithReturn::solveMore(
+    base::Planner *planner, std::size_t minSolCount, std::size_t maxSolCount,
+    const base::PlannerTerminationCondition *ptc)
 {
     OMPL_DEBUG("ParallelPlan.solveMore: starting planner %s", planner->getName().c_str());
-
     time::point start = time::now();
     try
     {
-        if (planner->solve(*ptc))
+        const ompl::base::PlannerStatus result = planner->solve(*ptc);
+        if (result)
         {
             double duration = time::seconds(time::now() - start);
             foundSolCountLock_.lock();
@@ -232,9 +229,11 @@ void ompl::tools::ParallelPlan::solveMore(base::Planner *planner, std::size_t mi
                        "between paths)",
                        duration, (unsigned int)phybrid_->pathCount(), attempts);
         }
+        return result;
     }
     catch (Exception &e)
     {
         OMPL_ERROR("Exception thrown during ParrallelPlan::solveMore: %s", e.what());
+        return ompl::base::PlannerStatus::UNKNOWN;
     }
 }

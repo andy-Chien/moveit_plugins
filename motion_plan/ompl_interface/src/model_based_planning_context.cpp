@@ -77,7 +77,6 @@
 namespace ompl_interface
 {
 static const rclcpp::Logger LOGGER = rclcpp::get_logger("moveit.ompl_planning.model_based_planning_context");
-static int32_t logPlannerStatus(ompl::base::PlannerStatus ompl_status);
 }  // namespace ompl_interface
 
 ompl_interface::ModelBasedPlanningContext::ModelBasedPlanningContext(const std::string& name,
@@ -960,10 +959,13 @@ const moveit_msgs::msg::MoveItErrorCodes ompl_interface::ModelBasedPlanningConte
       ompl_status = ompl_parallel_plan_.solve(ptc, 1, count, hybridize_);
       last_plan_time_ = ompl::time::seconds(ompl::time::now() - start);
       unregisterTerminationCondition();
-      std::cout<<"11111111111111111111111111 ompl_status = "<<ompl_status<<std::endl;
+      std::cout<<"ompl_status = "<<ompl_status<<std::endl;
     }
     else
     {
+      std::vector<ompl::base::PlannerStatus> ompl_status_list;
+      ompl_status_list.reserve(count);
+
       ob::PlannerTerminationCondition ptc = constructPlannerTerminationCondition(timeout, start);
       registerTerminationCondition(ptc);
       int n = count / max_planning_threads_;
@@ -986,13 +988,7 @@ const moveit_msgs::msg::MoveItErrorCodes ompl_interface::ModelBasedPlanningConte
           }
         }
 
-        ompl_status = ompl_parallel_plan_.solve(ptc, 1, count, hybridize_);
-        // bool r = ompl_parallel_plan_.solve(ptc, 1, count, hybridize_) == ompl::base::PlannerStatus::EXACT_SOLUTION;
-        // // Was this latest call successful too?
-        // result.val = (result.val == moveit_msgs::msg::MoveItErrorCodes::SUCCESS && r) ?
-        //                  moveit_msgs::msg::MoveItErrorCodes::SUCCESS :
-        //                  moveit_msgs::msg::MoveItErrorCodes::FAILURE;
-        std::cout<<"22222222222222222222222222 ompl_status = "<<ompl_status<<std::endl;
+        ompl_status_list.push_back(ompl_parallel_plan_.solve(ptc, 1, count, hybridize_));
       }
       n = count % max_planning_threads_;
       if (n && !ptc())
@@ -1013,20 +1009,40 @@ const moveit_msgs::msg::MoveItErrorCodes ompl_interface::ModelBasedPlanningConte
           }
         }
 
-        ompl_status = ompl_parallel_plan_.solve(ptc, 1, count, hybridize_);
-        bool r = ompl_parallel_plan_.solve(ptc, 1, count, hybridize_) == ompl::base::PlannerStatus::EXACT_SOLUTION;
-        // // Was this latest call successful too?
-        // result.val = (result.val == moveit_msgs::msg::MoveItErrorCodes::SUCCESS && r) ?
-        //                  moveit_msgs::msg::MoveItErrorCodes::SUCCESS :
-        //                  moveit_msgs::msg::MoveItErrorCodes::FAILURE;
-        std::cout<<"3333333333333333333333333333 ompl_status = "<<ompl_status<<std::endl;
+        ompl_status_list.push_back(ompl_parallel_plan_.solve(ptc, 1, count, hybridize_));
       }
       last_plan_time_ = ompl::time::seconds(ompl::time::now() - start);
       unregisterTerminationCondition();
+
+      using ps = ompl::base::PlannerStatus;
+      if(std::find(ompl_status_list.begin(), ompl_status_list.end(),
+                   ps::INVALID_START) != ompl_status_list.end()){
+        ompl_status = ps::INVALID_START;
+      }else if(std::find(ompl_status_list.begin(), ompl_status_list.end(),
+                         ps::INVALID_GOAL) != ompl_status_list.end()){
+        ompl_status = ps::INVALID_GOAL;
+      }else if(std::find(ompl_status_list.begin(), ompl_status_list.end(),
+                         ps::UNRECOGNIZED_GOAL_TYPE) != ompl_status_list.end()){
+        ompl_status = ps::UNRECOGNIZED_GOAL_TYPE;
+      }else if(std::find(ompl_status_list.begin(), ompl_status_list.end(),
+                         ps::EXACT_SOLUTION) != ompl_status_list.end()){
+        ompl_status = ps::EXACT_SOLUTION;
+      }else if(std::find(ompl_status_list.begin(), ompl_status_list.end(),
+                         ps::APPROXIMATE_SOLUTION) != ompl_status_list.end()){
+        ompl_status = ps::APPROXIMATE_SOLUTION;
+      }else{
+        ompl_status = ps::TIMEOUT;
+      }
+
+      std::cout<<"[moveit.ompl_planning.model_based_planning_context]: ompl_status_list = ";
+      for(const auto& st : ompl_status_list){
+          std::cout<<st<<", ";
+      }
+      std::cout<<std::endl;
     }
   }
   // fill the result status code
-  result.val = ompl_interface::logPlannerStatus(ompl_status);
+  result.val = logPlannerStatus(ompl_status);
 
   postSolve();
   return result;
@@ -1044,56 +1060,8 @@ void ompl_interface::ModelBasedPlanningContext::unregisterTerminationCondition()
   ptc_ = nullptr;
 }
 
-int32_t ompl_interface::ModelBasedPlanningContext::logPlannerStatus(og::SimpleSetupPtr ompl_simple_setup)
-{
-  auto result = moveit_msgs::msg::MoveItErrorCodes::PLANNING_FAILED;
-  ompl::base::PlannerStatus ompl_status = ompl_simple_setup->getLastPlannerStatus();
-  switch (ompl::base::PlannerStatus::StatusType(ompl_status))
-  {
-    case ompl::base::PlannerStatus::UNKNOWN:
-      RCLCPP_WARN(LOGGER, "Motion planning failed for an unknown reason");
-      result = moveit_msgs::msg::MoveItErrorCodes::PLANNING_FAILED;
-      break;
-    case ompl::base::PlannerStatus::INVALID_START:
-      RCLCPP_WARN(LOGGER, "Invalid start state");
-      result = moveit_msgs::msg::MoveItErrorCodes::START_STATE_INVALID;
-      break;
-    case ompl::base::PlannerStatus::INVALID_GOAL:
-      RCLCPP_WARN(LOGGER, "Invalid goal state");
-      result = moveit_msgs::msg::MoveItErrorCodes::GOAL_STATE_INVALID;
-      break;
-    case ompl::base::PlannerStatus::UNRECOGNIZED_GOAL_TYPE:
-      RCLCPP_WARN(LOGGER, "Unrecognized goal type");
-      result = moveit_msgs::msg::MoveItErrorCodes::UNRECOGNIZED_GOAL_TYPE;
-      break;
-    case ompl::base::PlannerStatus::TIMEOUT:
-      RCLCPP_WARN(LOGGER, "Timed out");
-      result = moveit_msgs::msg::MoveItErrorCodes::TIMED_OUT;
-      break;
-    case ompl::base::PlannerStatus::APPROXIMATE_SOLUTION:
-      RCLCPP_WARN(LOGGER, "Solution is approximate");
-      result = moveit_msgs::msg::MoveItErrorCodes::SUCCESS;
-      break;
-    case ompl::base::PlannerStatus::EXACT_SOLUTION:
-      result = moveit_msgs::msg::MoveItErrorCodes::SUCCESS;
-      break;
-    case ompl::base::PlannerStatus::CRASH:
-      RCLCPP_WARN(LOGGER, "OMPL crashed!");
-      result = moveit_msgs::msg::MoveItErrorCodes::CRASH;
-      break;
-    case ompl::base::PlannerStatus::ABORT:
-      RCLCPP_WARN(LOGGER, "OMPL was aborted");
-      result = moveit_msgs::msg::MoveItErrorCodes::ABORT;
-      break;
-    default:
-      // This should never happen
-      RCLCPP_WARN(LOGGER, "Unexpected PlannerStatus code from OMPL.");
-      result = moveit_msgs::msg::MoveItErrorCodes::PLANNING_FAILED;
-  }
-  return result;
-}
-
-int32_t ompl_interface::logPlannerStatus(ompl::base::PlannerStatus ompl_status)
+int32_t ompl_interface::ModelBasedPlanningContext::logPlannerStatus(
+  ompl::base::PlannerStatus ompl_status)
 {
   auto result = moveit_msgs::msg::MoveItErrorCodes::PLANNING_FAILED;
   switch (ompl::base::PlannerStatus::StatusType(ompl_status))
