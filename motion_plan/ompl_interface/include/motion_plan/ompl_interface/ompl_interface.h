@@ -36,7 +36,8 @@
 
 #pragma once
 
-#include <moveit/ompl_interface/planning_context_manager.h>
+// #include <moveit/ompl_interface/planning_context_manager.h>
+#include "motion_plan/ompl_interface/planning_context_manager.h"
 #include <moveit/constraint_samplers/constraint_sampler_manager.h>
 #include <moveit/constraint_sampler_manager_loader/constraint_sampler_manager_loader.h>
 #include <moveit/planning_interface/planning_interface.h>

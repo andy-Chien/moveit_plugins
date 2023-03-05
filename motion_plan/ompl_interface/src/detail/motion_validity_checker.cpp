@@ -34,7 +34,8 @@
 
 /* Author: Andy Chien */
 
-#include <moveit/ompl_interface/model_based_planning_context.h>
+// #include <moveit/ompl_interface/model_based_planning_context.h>
+#include "motion_plan/ompl_interface/model_based_planning_context.h"
 #include <ompl/base/spaces/constraint/ConstrainedStateSpace.h>
 #include <rclcpp/logger.hpp>
 #include <rclcpp/logging.hpp>

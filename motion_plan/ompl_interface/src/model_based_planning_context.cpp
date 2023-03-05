@@ -39,13 +39,15 @@
 #include <boost/algorithm/string/replace.hpp>
 // #include <boost/lexical_cast.hpp>
 
-#include <moveit/ompl_interface/model_based_planning_context.h>
+// #include <moveit/ompl_interface/model_based_planning_context.h>
+#include "motion_plan/ompl_interface/model_based_planning_context.h"
 #include <moveit/ompl_interface/detail/state_validity_checker.h>
 #include <moveit/ompl_interface/detail/constrained_sampler.h>
 #include <moveit/ompl_interface/detail/constrained_goal_sampler.h>
 #include <moveit/ompl_interface/detail/goal_union.h>
 #include <moveit/ompl_interface/detail/projection_evaluators.h>
-#include <moveit/ompl_interface/detail/constraints_library.h>
+// #include <moveit/ompl_interface/detail/constraints_library.h>
+#include "motion_plan/ompl_interface/detail/constraints_library.h"
 
 #include <moveit/kinematic_constraints/utils.h>
 

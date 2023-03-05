@@ -36,7 +36,8 @@
 
 #pragma once
 
-#include <moveit/ompl_interface/model_based_planning_context.h>
+// #include <moveit/ompl_interface/model_based_planning_context.h>
+#include "motion_plan/ompl_interface/model_based_planning_context.h"
 #include <moveit/ompl_interface/parameterization/model_based_state_space_factory.h>
 #include <moveit/constraint_samplers/constraint_sampler_manager.h>
 #include <moveit/macros/class_forward.h>

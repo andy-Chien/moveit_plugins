@@ -38,7 +38,8 @@
 #include <filesystem>
 #include <fstream>
 #include <moveit/ompl_interface/detail/constrained_sampler.h>
-#include <moveit/ompl_interface/detail/constraints_library.h>
+// #include <moveit/ompl_interface/detail/constraints_library.h>
+#include "motion_plan/ompl_interface/detail/constraints_library.h"
 
 #include <ompl/tools/config/SelfConfig.h>
 #include <utility>
