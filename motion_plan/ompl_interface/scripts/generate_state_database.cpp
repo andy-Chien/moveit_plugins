@@ -35,8 +35,10 @@
 
 /* Authors: Ioan Sucan, Michael Goerner */
 
-#include <moveit/ompl_interface/ompl_interface.h>
-#include <moveit/ompl_interface/detail/constraints_library.h>
+// #include <moveit/ompl_interface/ompl_interface.h>
+#include "motion_plan/ompl_interface/ompl_interface.h"
+// #include <moveit/ompl_interface/detail/constraints_library.h>
+#include "motion_plan/ompl_interface/detail/constraints_library.h"
 #include <moveit/robot_model_loader/robot_model_loader.h>
 
 #include <moveit/planning_scene_monitor/planning_scene_monitor.h>

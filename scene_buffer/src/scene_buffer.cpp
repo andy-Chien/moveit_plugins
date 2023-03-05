@@ -92,6 +92,7 @@ void SceneBuffer::Robot::load_robot(const std::string& urdf, const std::string& 
       prim_links.push_back(link);
     }
   }
+  obstacles.header.frame_id = "world";
   obstacles.meshes_poses.resize(mesh_links.size());
   obstacles.primitives_poses.resize(prim_links.size());
 
@@ -100,6 +101,64 @@ void SceneBuffer::Robot::load_robot(const std::string& urdf, const std::string& 
       "Convert from link to obstcale msg failed");
   }
 }
+
+void SceneBuffer::Robot::pub_obstacles(const Robot& other, const uint8_t step) const
+{
+  
+
+  const auto& obs = other.obstacles;
+  const auto& links = other.mesh_links;
+  const auto time_now = node_->get_clock()->now();
+
+  MarkerArray msg;
+
+  size_t num_obs = 0;
+  for(const auto& poses : obs.meshes_poses){
+    num_obs += poses.poses.size();
+  }
+  msg.markers.reserve(num_obs);
+
+  for(size_t i=0; i<links.size(); i++)
+  {
+    const std::string& mesh_file_name = links[i]->getVisualMeshFilename();
+    const std::string& link_name = links[i]->getName();
+    for(size_t id=0; id < obs.meshes_poses[i].poses.size(); id++)
+    {
+      if(id % step != 0 && id != obs.meshes_poses[i].poses.size() - 1){
+        continue;
+      }
+      const auto& pose = obs.meshes_poses[i].poses[id];
+      visualization_msgs::msg::Marker marker;
+      marker.header.stamp = time_now;
+      marker.header.frame_id = "world";
+      marker.ns = link_name;
+      marker.id = id;
+      marker.type = visualization_msgs::msg::Marker::MESH_RESOURCE;
+      marker.action = visualization_msgs::msg::Marker::ADD;
+      marker.lifetime = rclcpp::Duration(std::chrono::seconds(3));
+      marker.frame_locked = false;
+      marker.mesh_resource = mesh_file_name;
+      marker.mesh_use_embedded_materials = true;
+      marker.pose.position.x = pose.pose[0];
+      marker.pose.position.y = pose.pose[1];
+      marker.pose.position.z = pose.pose[2];
+      marker.pose.orientation.w = pose.pose[3];
+      marker.pose.orientation.x = pose.pose[4];
+      marker.pose.orientation.y = pose.pose[5];
+      marker.pose.orientation.z = pose.pose[6];
+      marker.scale.x = 1;
+      marker.scale.y = 1;
+      marker.scale.z = 1;
+      marker.color.r = 0.8;
+      marker.color.g = 0.8;
+      marker.color.b = 0.8;
+      marker.color.a = 0.2;
+      msg.markers.emplace_back(std::move(marker));
+    }
+  }
+  obstacles_publisher_->publish(msg);
+}
+
 
 bool SceneBuffer::get_obstacle_cb(
   const std::shared_ptr<ObstacleSrv::Request> req,
@@ -121,6 +180,46 @@ bool SceneBuffer::get_obstacle_cb(
     return p;
   };
 
+  const auto& pose_interpolation = [](const int interpolation_num, 
+    const Eigen::Quaterniond q_0, const Eigen::Vector3d v_0, const Eigen::Quaterniond q_1, 
+    const Eigen::Vector3d v_1, std::vector<Eigen::Isometry3d>& trans){
+      std::cout<<"pose_interpolation: "<<interpolation_num<<std::endl;
+      for(int i=1; i < interpolation_num; i++)
+      {
+        const double t = double(i) / double(interpolation_num);
+        const Eigen::Vector3d v_interp = (1 - t) * v_1 + t * v_0;
+        const Eigen::Quaterniond q_interp = q_1.slerp(t, q_0);
+        trans.emplace_back(Eigen::Translation3d(v_interp(0), v_interp(1), v_interp(2)) * q_interp);
+      }
+    };
+
+  const double p_min = params_.pos_diff_min;
+  const double p_max = params_.pos_diff_max;
+  const double q_min = params_.rot_diff_min;
+  const double q_max = params_.rot_diff_max;
+  const auto& pose_adjust = [&p_min, &p_max, &q_min, &q_max, &pose_interpolation]
+    (std::vector<Eigen::Isometry3d>& trans, const Eigen::Isometry3d& last_trans){
+      assert(trans.size() == 1);
+      const Eigen::Quaterniond q_0(last_trans.rotation());
+      const Eigen::Vector3d v_0(last_trans.translation());
+      const Eigen::Quaterniond q_1(trans[0].rotation());
+      const Eigen::Vector3d v_1(trans[0].translation());
+      const auto p_d = v_1 - v_0;
+      const double q_d[4] = {q_1.w()-q_0.w(), q_1.x()-q_0.x(), q_1.y()-q_0.y(), q_1.z()-q_0.z()};
+      const double p_l = std::hypot(p_d(0), p_d(1), p_d(2));
+      const double q_l_0 = q_d[0]*q_d[0] + q_d[1]*q_d[1] + q_d[2]*q_d[2] + q_d[3]*q_d[3];
+      const double q_l = (q_l_0 > 2) ? 4 - q_l_0 : q_l_0; 
+      if(p_l < p_min && q_l < q_min){
+        return false; // ignore this trans
+      }
+      if(p_l > p_max || q_l > q_max){
+        const int inter_num = 
+          std::ceil(std::max(p_l / ((p_max + p_min) / 2), q_l / ((q_max + q_min) / 2)));
+        pose_interpolation(inter_num, q_0, v_0, q_1, v_1, trans);
+      }
+      return true;
+    };
+
   const auto& get_tarj_start_time = [](const auto& trajectory){
     return rclcpp::Time(trajectory->header.stamp);
   };
@@ -129,15 +228,39 @@ bool SceneBuffer::get_obstacle_cb(
       trajectory->points.back().time_from_start));
   };
 
-  const auto& get_link_poses_from_state = 
-    [&eigen_to_msg](const std::shared_ptr<Robot>& robot){
-      for(size_t i=0; i<robot->mesh_links.size(); i++){
-        const auto& trans = robot->state->getGlobalLinkTransform(robot->mesh_links[i]);
-        robot->obstacles.meshes_poses[i].poses.push_back(eigen_to_msg(trans));
+  const auto& get_link_poses_from_state = [&eigen_to_msg, &pose_adjust](
+    const std::shared_ptr<Robot>& robot, std::vector<Eigen::Isometry3d>& last_trans){
+      const size_t mesh_links_size = robot->mesh_links.size();
+      const size_t prim_links_size = robot->prim_links.size();
+      const bool check_diff = last_trans.size() != 0;
+      if(last_trans.size() == 0){
+        last_trans.resize(mesh_links_size + prim_links_size);
       }
-      for(size_t i=0; i<robot->prim_links.size(); i++){
-        const auto& trans = robot->state->getGlobalLinkTransform(robot->prim_links[i]);
-        robot->obstacles.primitives_poses[i].poses.push_back(eigen_to_msg(trans));
+      assert(last_trans.size() == mesh_links_size + prim_links_size);
+      const moveit::core::RobotStateConstPtr const_state(robot->state);
+      std::vector<Eigen::Isometry3d> trans_list;
+      trans_list.reserve(10);
+      for(size_t i=0; i < mesh_links_size; i++){
+        trans_list.clear();
+        trans_list.emplace_back(const_state->getCollisionBodyTransform(robot->mesh_links[i], 0));
+        if(check_diff && !pose_adjust(trans_list, last_trans[i])){
+          continue;
+        }
+        for(const auto& trans : trans_list){
+          robot->obstacles.meshes_poses[i].poses.push_back(eigen_to_msg(trans));
+        }
+        last_trans[i] = trans_list[0];
+      }
+      for(size_t i=0; i < prim_links_size; i++){
+        trans_list.clear();
+        trans_list.emplace_back(const_state->getCollisionBodyTransform(robot->prim_links[i], 0));
+        if(check_diff && !pose_adjust(trans_list, last_trans[i + mesh_links_size])){
+          continue;
+        }
+        for(const auto& trans : trans_list){
+          robot->obstacles.primitives_poses[i].poses.push_back(eigen_to_msg(trans));
+        }
+        last_trans[i + mesh_links_size] = trans_list[0];
       }
     };
 
@@ -182,8 +305,7 @@ bool SceneBuffer::get_obstacle_cb(
     RCLCPP_INFO(get_logger(), "Waiting for other planning");
   }
 
-  const rclcpp::Time start_time(
-    rclcpp::Time(req->header.stamp) + rclcpp::Duration(req->run_after));
+  const rclcpp::Time start_time = this->now();
 
   const auto& collision_robots =
     params_.collision_maps.robot_names_map.at(req_robot_name).collision_robots;
@@ -192,21 +314,26 @@ bool SceneBuffer::get_obstacle_cb(
 
   for(const auto& other_name : collision_robots)
   {
-    const std::lock_guard<std::mutex> data_lock(trajectory_data_mutex_);
 
     const auto& other_robot = robots_.at(other_name);
     other_robot->clean_poses();
 
-    if(other_robot->running_trajectory && 
-      check_last_time(start_time, *delay_duration_, other_robot->running_trajectory))
     {
-      other_robot->running_trajectory = nullptr;
+      const std::lock_guard<std::shared_mutex> data_lock(trajectory_data_mutex_);
+      if(other_robot->running_trajectory && 
+        check_last_time(start_time, *delay_duration_, other_robot->running_trajectory))
+      {
+        other_robot->running_trajectory = nullptr;
+      }
     }
+
+    const std::shared_lock<std::shared_mutex> data_lock(trajectory_data_mutex_);
 
     if(!(other_robot->planned_trajectory || other_robot->running_trajectory))
     {
       other_robot->update_to_current();
-      get_link_poses_from_state(other_robot);
+      std::vector<Eigen::Isometry3d> last_trans;
+      get_link_poses_from_state(other_robot, last_trans);
       res->obstacles_list.push_back(other_robot->obstacles);
       continue;
     }
@@ -215,6 +342,8 @@ bool SceneBuffer::get_obstacle_cb(
       other_robot->running_trajectory : other_robot->planned_trajectory;
     const auto& traj_joint_names = trajectory->joint_names;
     const auto& tarj_start_time = get_tarj_start_time(trajectory);
+
+    std::vector<Eigen::Isometry3d> last_trans;
     for(const auto& point : trajectory->points)
     {
       if(other_robot->running_trajectory && 
@@ -227,9 +356,20 @@ bool SceneBuffer::get_obstacle_cb(
           traj_joint_names[i], &(point.positions[i]));
       }
       other_robot->state->update();
-      get_link_poses_from_state(other_robot);
+      get_link_poses_from_state(other_robot, last_trans);
     }
+
+    std::cout<<"mesh_poses.poses.size() = "<<std::endl;
+    for(const auto& mesh_poses : other_robot->obstacles.meshes_poses)
+      std::cout<<mesh_poses.poses.size()<<", ";
+    std::cout<<std::endl;
+
     res->obstacles_list.push_back(other_robot->obstacles);
+  }
+  if(params_.pub_obstacles){
+    for(const auto& other_name : collision_robots){
+      robots_.at(req_robot_name)->pub_obstacles(*robots_.at(other_name), params_.obstacle_pub_step);
+    }
   }
   rclcpp::Time t2 = this->now();
   std::cout<<"get_obstacle_cb end time = "<<(t2 - t1).seconds()<<std::endl;
@@ -347,7 +487,7 @@ bool SceneBuffer::set_trajectory_cb(
     }
   }(req->header.frame_id);
 
-  const std::lock_guard<std::mutex> data_lock(trajectory_data_mutex_);
+  const std::lock_guard<std::shared_mutex> data_lock(trajectory_data_mutex_);
 
   rclcpp::Time t;
 

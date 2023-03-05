@@ -34,7 +34,8 @@
 
 /* Author: Ioan Sucan */
 
-#include <moveit/ompl_interface/planning_context_manager.h>
+// #include <moveit/ompl_interface/planning_context_manager.h>
+#include "motion_plan/ompl_interface/planning_context_manager.h"
 #include <moveit/robot_state/conversions.h>
 
 #include <utility>

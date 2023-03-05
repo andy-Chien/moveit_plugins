@@ -19,6 +19,7 @@ set(THIS_PACKAGE_INCLUDE_DEPENDS
   moveit_core
   moveit_ros_planning
   generate_parameter_library
+  visualization_msgs
 )
 
 ## System dependencies are found with CMake's conventions

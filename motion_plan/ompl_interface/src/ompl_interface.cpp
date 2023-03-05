@@ -34,7 +34,8 @@
 
 /* Author: Ioan Sucan */
 
-#include <moveit/ompl_interface/ompl_interface.h>
+// #include <moveit/ompl_interface/ompl_interface.h>
+#include "motion_plan/ompl_interface/ompl_interface.h"
 #include <moveit/robot_state/conversions.h>
 #include <moveit/kinematic_constraints/utils.h>
 #include <moveit/ompl_interface/detail/constrained_valid_state_sampler.h>

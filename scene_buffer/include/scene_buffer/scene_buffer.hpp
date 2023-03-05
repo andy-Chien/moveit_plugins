@@ -7,6 +7,7 @@
 #include <moveit/robot_model/robot_model.h>
 #include <moveit/robot_state/robot_state.h>
 #include <moveit/robot_model_loader/robot_model_loader.h>
+#include <visualization_msgs/msg/marker_array.hpp>
 #include <trajectory_msgs/msg/joint_trajectory.hpp>
 #include <sensor_msgs/msg/joint_state.h>
 #include <memory>
@@ -20,6 +21,9 @@ class SceneBuffer : public rclcpp::Node
 {
 public:
   using TrajectoryMsg = trajectory_msgs::msg::JointTrajectory;
+  using ObstacleSrv = mr_msgs::srv::GetRobotTrajectoryObstacle;
+  using TrajectorySrv = mr_msgs::srv::SetTrajectoryState;
+  using MarkerArray = visualization_msgs::msg::MarkerArray;
 
   SceneBuffer(const std::string& node_name, const rclcpp::NodeOptions& node_options);
   void init();
@@ -33,9 +37,13 @@ public:
       obstacles.name = robot_name + "_trajectory_obstacles";
       load_robot(robot_name);
 
+      obstacles_publisher_ = node->create_publisher<MarkerArray>(
+        robot_name + "/visualization_marker_array", 1);
+
       jnt_states_sub_ = node->create_subscription<sensor_msgs::msg::JointState>(
         robot_name + "/joint_states", 1, 
         [this](const sensor_msgs::msg::JointState::SharedPtr msg) -> void {
+          const std::lock_guard<std::shared_mutex> data_lock(jnt_data_mutex_);
           if(jnt_names_.size() != msg->name.size()){
             jnt_names_ = msg->name;
           }
@@ -46,6 +54,7 @@ public:
 
     void update_to_current()
     {
+      const std::shared_lock<std::shared_mutex> data_lock(jnt_data_mutex_);
       for(size_t i=0; i<jnt_names_.size(); i++){
         state->setJointPositions(jnt_names_.at(i), &(jnt_pos_[i]));
       }
@@ -61,6 +70,8 @@ public:
         x.poses.clear();
       }
     }
+
+    void pub_obstacles(const Robot& other, const uint8_t step) const;
 
     moveit::core::RobotModelPtr model;
     moveit::core::RobotStatePtr state;
@@ -82,15 +93,13 @@ public:
     
     std::vector<double> jnt_pos_;
     std::vector<std::string> jnt_names_;
+    std::shared_mutex jnt_data_mutex_;
     rclcpp::AsyncParametersClient::SharedPtr param_client_;
     rclcpp::Subscription<sensor_msgs::msg::JointState>::SharedPtr jnt_states_sub_;
+    rclcpp::Publisher<MarkerArray>::SharedPtr obstacles_publisher_;
   };
 
 private:
-
-  using ObstacleSrv = mr_msgs::srv::GetRobotTrajectoryObstacle;
-  using TrajectorySrv = mr_msgs::srv::SetTrajectoryState;
-
   bool get_obstacle_cb(
     const std::shared_ptr<ObstacleSrv::Request> req,
     std::shared_ptr<ObstacleSrv::Response> res);
@@ -98,8 +107,6 @@ private:
   bool set_trajectory_cb(
     const std::shared_ptr<TrajectorySrv::Request> req,
     std::shared_ptr<TrajectorySrv::Response> res);
-  
-
 
   using Params = scene_buffer::Params;
   using ParamListener = scene_buffer::ParamListener;
@@ -107,8 +114,8 @@ private:
   Params params_;
   
   std::string some_one_is_planning_;
-  std::mutex trajectory_data_mutex_;
   std::mutex some_one_is_planning_mutex_;
+  std::shared_mutex trajectory_data_mutex_;
   rclcpp::CallbackGroup::SharedPtr cb_group_;
 
   std::unique_ptr<rclcpp::Duration> delay_duration_;
