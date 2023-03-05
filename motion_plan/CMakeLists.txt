@@ -29,6 +29,7 @@ set(THIS_PACKAGE_INCLUDE_DEPENDS
 set(THIS_PACKAGE_LIBRARIES
   ${PROJECT_NAME}_objectives
   ${PROJECT_NAME}_planner
+  ${PROJECT_NAME}_ompl_tools
   moveit_ompl_interface
   moveit_ompl_planner_plugin
 )
@@ -42,6 +43,7 @@ endforeach()
 
 include_directories(
   SYSTEM
+  ompl/tools/include
   adapt_prm/include
   ompl_interface/include
   objectives/include
@@ -50,6 +52,7 @@ include_directories(
   ${OMPL_INCLUDE_DIRS}
 )
 
+add_subdirectory(ompl)
 add_subdirectory(adapt_prm)
 add_subdirectory(objectives)
 add_subdirectory(ompl_interface)
