@@ -104,8 +104,6 @@ void SceneBuffer::Robot::load_robot(const std::string& urdf, const std::string& 
 
 void SceneBuffer::Robot::pub_obstacles(const Robot& other, const uint8_t step) const
 {
-  
-
   const auto& obs = other.obstacles;
   const auto& links = other.mesh_links;
   const auto time_now = node_->get_clock()->now();
@@ -277,6 +275,31 @@ bool SceneBuffer::get_obstacle_cb(
         rclcpp::Duration(point.time_from_start) + *delay_duration_);
     };
 
+  const auto& get_pose_from_trajectory = 
+    [&check_running_time_with_delay, &get_link_poses_from_state, &get_tarj_start_time](
+      const auto& robot, const auto&  trajectory, const auto& start_time, bool running_traj){
+        if(!trajectory){
+          return;
+        }
+        std::vector<Eigen::Isometry3d> last_trans;
+        const auto& traj_joint_names = trajectory->joint_names;
+        const auto& tarj_start_time = get_tarj_start_time(trajectory);
+        for(const auto& point : trajectory->points)
+        {
+          if(running_traj && 
+            check_running_time_with_delay(start_time, tarj_start_time, point)){
+            continue;
+          }
+          for(size_t i=0; i<traj_joint_names.size(); i++)
+          {
+            robot->state->setJointPositions(
+              traj_joint_names[i], &(point.positions[i]));
+          }
+          robot->state->update();
+          get_link_poses_from_state(robot, last_trans);
+        }
+      };
+
   const std::string req_robot_name = [](std::string& robot_name){
     if(robot_name.size() > 1 && robot_name.at(0) == '/'){
       return std::string(robot_name.begin() + 1, robot_name.end());
@@ -338,26 +361,8 @@ bool SceneBuffer::get_obstacle_cb(
       continue;
     }
 
-    const auto& trajectory = (other_robot->running_trajectory) ? 
-      other_robot->running_trajectory : other_robot->planned_trajectory;
-    const auto& traj_joint_names = trajectory->joint_names;
-    const auto& tarj_start_time = get_tarj_start_time(trajectory);
-
-    std::vector<Eigen::Isometry3d> last_trans;
-    for(const auto& point : trajectory->points)
-    {
-      if(other_robot->running_trajectory && 
-        check_running_time_with_delay(start_time, tarj_start_time, point)){
-        continue;
-      }
-      for(size_t i=0; i<traj_joint_names.size(); i++)
-      {
-        other_robot->state->setJointPositions(
-          traj_joint_names[i], &(point.positions[i]));
-      }
-      other_robot->state->update();
-      get_link_poses_from_state(other_robot, last_trans);
-    }
+    get_pose_from_trajectory(other_robot, other_robot->running_trajectory, start_time, true);
+    get_pose_from_trajectory(other_robot, other_robot->planned_trajectory, start_time, false);
 
     std::cout<<"mesh_poses.poses.size() = "<<std::endl;
     for(const auto& mesh_poses : other_robot->obstacles.meshes_poses)
