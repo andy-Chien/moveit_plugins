@@ -51,10 +51,10 @@ namespace move_group
 using ExecTrajectory = moveit_msgs::action::ExecuteTrajectory;
 using ExecTrajectoryGoal = rclcpp_action::ServerGoalHandle<ExecTrajectory>;
 
-class MoveGroupExecuteTrajectoryAction : public MoveGroupCapability
+class MoveGroupAsyncExecuteTrajectoryAction : public MoveGroupCapability
 {
 public:
-  MoveGroupExecuteTrajectoryAction();
+  MoveGroupAsyncExecuteTrajectoryAction();
 
   void initialize() override;
 
@@ -65,6 +65,7 @@ private:
   void preemptExecuteTrajectoryCallback();
   void setExecuteTrajectoryState(MoveGroupState state, const std::shared_ptr<ExecTrajectoryGoal>& goal);
 
+  rclcpp::CallbackGroup::SharedPtr cb_group_;
   std::shared_ptr<rclcpp_action::Server<ExecTrajectory>> execute_action_server_;
 };
 
