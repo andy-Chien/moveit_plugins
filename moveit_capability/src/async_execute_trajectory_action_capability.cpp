@@ -116,8 +116,35 @@ void MoveGroupAsyncExecuteTrajectoryAction::executePath(const std::shared_ptr<Ex
   if (context_->trajectory_execution_manager_->push(goal->get_goal()->trajectory))
   {
     setExecuteTrajectoryState(MONITOR, goal);
-    context_->trajectory_execution_manager_->execute();
-    moveit_controller_manager::ExecutionStatus status = context_->trajectory_execution_manager_->waitForExecution();
+    moveit_controller_manager::ExecutionStatus status = 
+      moveit_controller_manager::ExecutionStatus::RUNNING;
+    context_->trajectory_execution_manager_->execute(
+      [&status](const moveit_controller_manager::ExecutionStatus& status_in){
+        status = status_in;
+      }
+    );
+    std::size_t points_cnt = goal->get_goal()->trajectory.joint_trajectory.points.size();
+    auto fb = std::make_shared<ExecTrajectory::Feedback>();
+
+    while(status == moveit_controller_manager::ExecutionStatus::RUNNING && rclcpp::ok)
+    {
+      std::this_thread::sleep_for(std::chrono::milliseconds(50));
+
+      const auto& [traj_indx, point_indx] = 
+        context_->trajectory_execution_manager_->getCurrentExpectedTrajectoryIndex();
+      if(traj_indx == -1 && point_indx == -1){
+        continue;
+      }
+
+      fb->state = "RUNNING " + std::to_string(point_indx * 100 / points_cnt) + " / 100, " + \
+        std::to_string(points_cnt - point_indx) + " points left";
+      goal->publish_feedback(fb);
+    }
+
+    if(status == moveit_controller_manager::ExecutionStatus::RUNNING)
+    {
+      status = context_->trajectory_execution_manager_->waitForExecution();
+    }
     if (status == moveit_controller_manager::ExecutionStatus::SUCCEEDED)
     {
       action_res->error_code.val = moveit_msgs::msg::MoveItErrorCodes::SUCCESS;
