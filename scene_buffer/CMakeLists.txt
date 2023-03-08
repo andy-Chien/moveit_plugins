@@ -60,6 +60,20 @@ ament_target_dependencies(${PROJECT_NAME}_node
   ${THIS_PACKAGE_INCLUDE_DEPENDS}
 )
 
+add_executable(compute_trajectory_length_node
+  src/compute_trajectory_length_node.cpp
+)
+target_link_libraries(compute_trajectory_length_node
+  ${PROJECT_NAME}_parameters
+)
+target_include_directories(compute_trajectory_length_node PUBLIC
+  $<INSTALL_INTERFACE:include>
+)
+ament_target_dependencies(compute_trajectory_length_node
+  ${THIS_PACKAGE_INCLUDE_DEPENDS}
+)
+
+
 target_compile_features(scene_buffer_node PUBLIC c_std_99 cxx_std_17)  # Require C99 and C++17
 
 install(TARGETS ${PROJECT_NAME} ${PROJECT_NAME}_parameters
@@ -71,7 +85,12 @@ install(TARGETS ${PROJECT_NAME} ${PROJECT_NAME}_parameters
 )
 
 install(TARGETS ${PROJECT_NAME}_node
-  DESTINATION lib/${PROJECT_NAME})
+  DESTINATION lib/${PROJECT_NAME}
+)
+
+install(TARGETS compute_trajectory_length_node
+  DESTINATION lib/${PROJECT_NAME}
+)
 
 install(
   DIRECTORY config launch include
