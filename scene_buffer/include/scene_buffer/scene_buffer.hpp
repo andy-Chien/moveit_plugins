@@ -37,9 +37,6 @@ public:
       obstacles.name = robot_name + "_trajectory_obstacles";
       load_robot(robot_name);
 
-      obstacles_publisher_ = node->create_publisher<MarkerArray>(
-        robot_name + "/visualization_marker_array", 1);
-
       jnt_states_sub_ = node->create_subscription<sensor_msgs::msg::JointState>(
         robot_name + "/joint_states", 1, 
         [this](const sensor_msgs::msg::JointState::SharedPtr msg) -> void {
@@ -70,8 +67,6 @@ public:
         x.poses.clear();
       }
     }
-
-    void pub_obstacles(const Robot& other, const uint8_t step) const;
 
     moveit::core::RobotModelPtr model;
     moveit::core::RobotStatePtr state;
@@ -108,6 +103,8 @@ private:
     const std::shared_ptr<TrajectorySrv::Request> req,
     std::shared_ptr<TrajectorySrv::Response> res);
 
+  void pub_obstacles(const Robot& other, const uint8_t step) const;
+
   using Params = scene_buffer::Params;
   using ParamListener = scene_buffer::ParamListener;
   std::shared_ptr<ParamListener> param_listener_;
@@ -122,6 +119,7 @@ private:
   std::map<std::string, std::shared_ptr<Robot>> robots_;
   rclcpp::Service<ObstacleSrv>::SharedPtr get_obstacle_service_;
   rclcpp::Service<TrajectorySrv>::SharedPtr set_trajectory_service_;
+  rclcpp::Publisher<MarkerArray>::SharedPtr obstacles_visualization_publisher_;
 };
 
 // // ==============================================================================

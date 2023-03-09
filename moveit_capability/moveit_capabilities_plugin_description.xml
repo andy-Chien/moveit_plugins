@@ -1,4 +1,4 @@
-<library path="libmoveit_move_group_capabilities">
+<library path="moveit_move_group_capabilities">
 
   <class name="moveit_capability/MoveGroupAsyncExecuteTrajectoryAction" type="move_group::MoveGroupAsyncExecuteTrajectoryAction" base_class_type="move_group::MoveGroupCapability">
     <description>

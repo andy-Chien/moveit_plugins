@@ -15,6 +15,8 @@ SceneBuffer::SceneBuffer(const std::string& node_name, const rclcpp::NodeOptions
     "/set_trajectory_state", std::bind(
       &SceneBuffer::set_trajectory_cb, this, std::placeholders::_1, std::placeholders::_2),
       rmw_qos_profile_services_default, cb_group_);
+  obstacles_visualization_publisher_ = this->create_publisher<MarkerArray>(
+    "/visualization_marker_array", 1);
 }
 
 void SceneBuffer::init()
@@ -102,11 +104,11 @@ void SceneBuffer::Robot::load_robot(const std::string& urdf, const std::string& 
   }
 }
 
-void SceneBuffer::Robot::pub_obstacles(const Robot& other, const uint8_t step) const
+void SceneBuffer::pub_obstacles(const Robot& robot, const uint8_t step) const
 {
-  const auto& obs = other.obstacles;
-  const auto& links = other.mesh_links;
-  const auto time_now = node_->get_clock()->now();
+  const auto& obs = robot.obstacles;
+  const auto& links = robot.mesh_links;
+  const auto time_now = this->now();
 
   MarkerArray msg;
 
@@ -147,14 +149,14 @@ void SceneBuffer::Robot::pub_obstacles(const Robot& other, const uint8_t step) c
       marker.scale.x = 1;
       marker.scale.y = 1;
       marker.scale.z = 1;
-      marker.color.r = 0.8;
+      marker.color.r = 0.2;
       marker.color.g = 0.8;
-      marker.color.b = 0.8;
-      marker.color.a = 0.2;
+      marker.color.b = 0.5;
+      marker.color.a = 0.3;
       msg.markers.emplace_back(std::move(marker));
     }
   }
-  obstacles_publisher_->publish(msg);
+  obstacles_visualization_publisher_->publish(msg);
 }
 
 
@@ -373,7 +375,7 @@ bool SceneBuffer::get_obstacle_cb(
   }
   if(params_.pub_obstacles){
     for(const auto& other_name : collision_robots){
-      robots_.at(req_robot_name)->pub_obstacles(*robots_.at(other_name), params_.obstacle_pub_step);
+      pub_obstacles(*robots_.at(other_name), params_.obstacle_pub_step);
     }
   }
   rclcpp::Time t2 = this->now();
