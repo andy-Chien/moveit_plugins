@@ -64,12 +64,6 @@ public:
                     const planning_interface::MotionPlanRequest& req, planning_interface::MotionPlanResponse& res,
                     std::vector<std::size_t>& /*added_path_index*/) const override
   {
-    rclcpp::Time t_start = this_node_->now();
-    auto obs_req = std::make_shared<mr_msgs::srv::GetRobotTrajectoryObstacle::Request>();
-    obs_req->header = req.start_state.joint_state.header;
-    obs_req->header.stamp = this_node_->now();
-    obs_req->robot_name = robot_name_;
-
     const auto set_trajectory_state = [&](bool plan_success){
       moveit_msgs::msg::MotionPlanResponse res_msg;
       auto traj_req = std::make_shared<mr_msgs::srv::SetTrajectoryState::Request>();
@@ -100,7 +94,21 @@ public:
       }
       return set_traj_future.get()->success;
     };
-    
+
+    const auto& set_extra_link_padding = [this](double value){
+      const auto cenv = (*planning_scene_)->getCollisionEnvNonConst();
+      std::map<std::string, double> paddings = cenv->getLinkPadding();
+      for(auto& padding : paddings){
+        padding.second += value;
+      }
+      cenv->setLinkPadding(paddings);
+    };
+
+    rclcpp::Time t_start = this_node_->now();
+    auto obs_req = std::make_shared<mr_msgs::srv::GetRobotTrajectoryObstacle::Request>();
+    obs_req->header = req.start_state.joint_state.header;
+    obs_req->header.stamp = this_node_->now();
+    obs_req->robot_name = robot_name_;
 
     if(!(*planning_scene_))
     {
@@ -108,7 +116,9 @@ public:
         planning_scene->getRobotModel());
     }
     copyPlanningScene(planning_scene, *planning_scene_);
-    (*planning_scene_)->setCurrentState(planning_scene->getCurrentState());
+    set_extra_link_padding(extra_padding_);
+    // (*planning_scene_)->setCurrentState(planning_scene->getCurrentState());
+
     const collision_detection::WorldPtr& world = (*planning_scene_)->getWorldNonConst();
     // *world = collision_detection::World(*(planning_scene->getWorld()));
     rclcpp::Time t_copy = this_node_->now();
@@ -358,7 +368,7 @@ public:
   }
 
   void initialize(const rclcpp::Node::SharedPtr& node, 
-                  const std::string& /* parameter_namespace */) override
+                  const std::string& parameter_namespace) override
   {
     this_node_ = std::make_shared<rclcpp::Node>("tarjectory_obstacles_getter");
     
@@ -381,9 +391,12 @@ public:
     planning_scene_ = new std::shared_ptr<planning_scene::PlanningScene>;
 
     this_node_thread_ = std::thread([this](){rclcpp::spin(this_node_);});
+
+    node->get_parameter_or(parameter_namespace + ".extra_robot_padding", extra_padding_, 0.0);
     
     RCLCPP_INFO(logger, 
-      "AddTrajectoryObstacles planning adapter for robot '%s' is loaded", robot_name_.c_str());
+      "AddTrajectoryObstacles planning adapter for robot '%s' is loaded, extra robot padding is %f",
+      robot_name_.c_str(), extra_padding_);
   }
 
   ~AddTrajectoryObstacles() override
@@ -392,6 +405,7 @@ public:
   }
 
 protected:
+  double extra_padding_;
   std::string robot_name_;
   std::thread this_node_thread_;
   rclcpp::Node::SharedPtr this_node_;

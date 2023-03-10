@@ -21,3 +21,8 @@ scene_buffer:
       robot_2:
         collision_robots:
           - robot_1
+
+compute_traj_length:
+  ros__parameters:
+    robot_names:
+      - robot_1
