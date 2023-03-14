@@ -152,7 +152,7 @@ void SceneBuffer::pub_obstacles(const Robot& robot, const uint8_t step) const
       marker.color.r = 0.2;
       marker.color.g = 0.8;
       marker.color.b = 0.5;
-      marker.color.a = 0.3;
+      marker.color.a = 0.1;
       msg.markers.emplace_back(std::move(marker));
     }
   }

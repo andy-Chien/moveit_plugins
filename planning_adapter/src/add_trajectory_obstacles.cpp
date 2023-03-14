@@ -390,7 +390,10 @@ public:
 
     planning_scene_ = new std::shared_ptr<planning_scene::PlanningScene>;
 
-    this_node_thread_ = std::thread([this](){rclcpp::spin(this_node_);});
+    private_executor_ = std::make_shared<rclcpp::executors::SingleThreadedExecutor>();
+    private_executor_->add_node(this_node_);
+
+    this_node_thread_ = std::thread([this](){private_executor_->spin();});
 
     node->get_parameter_or(parameter_namespace + ".extra_robot_padding", extra_padding_, 0.0);
     
@@ -401,6 +404,10 @@ public:
 
   ~AddTrajectoryObstacles() override
   {
+    private_executor_->cancel();
+    if (this_node_thread_.joinable())
+      this_node_thread_.join();
+    private_executor_.reset();
     delete planning_scene_;
   }
 
@@ -410,6 +417,7 @@ protected:
   std::thread this_node_thread_;
   rclcpp::Node::SharedPtr this_node_;
   std::shared_ptr<planning_scene::PlanningScene>* planning_scene_;
+  std::shared_ptr<rclcpp::executors::SingleThreadedExecutor> private_executor_;
   rclcpp::Client<mr_msgs::srv::SetTrajectoryState>::SharedPtr set_traj_client_;
   rclcpp::Client<mr_msgs::srv::GetRobotTrajectoryObstacle>::SharedPtr get_obs_client_;
 };
