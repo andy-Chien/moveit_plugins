@@ -70,7 +70,7 @@ namespace ompl
             extraction */
         static const unsigned int MIN_ADDED_SEGMENTS_FOR_LAZY_OPTIMIZATION = 5;
 
-        static const unsigned int MAX_SOLUTIONS_FOR_LAZY_OPTIMIZATION = 5;
+        static const unsigned int MAX_SOLUTIONS_FOR_LAZY_OPTIMIZATION = 50;
 
         static const unsigned int VERTEX_CLEARING_TIMING = 25;
 
@@ -473,7 +473,7 @@ ompl::base::PlannerStatus ompl::geometric::AdaptPRM::solve(const base::PlannerTe
                 someSolutionFound = true;
                 base::Cost c, min_c;
                 min_c = opt_->motionCostHeuristic(stateProperty_[startV], stateProperty_[goalV]); //costHeuristic(startV, goalV);
-                c = base::Cost(solution->cost(opt_).value() / (min_c.value() + 0.0001));
+                c = base::Cost((solution->length() + 0.0001) / (min_c.value() + 0.0001));
                 
                 if (opt_->isSatisfied(c) || !enableExploration_)
                 {
