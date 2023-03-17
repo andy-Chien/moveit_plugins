@@ -32,9 +32,9 @@
  *  POSSIBILITY OF SUCH DAMAGE.
  *********************************************************************/
 
-/* Author: Kentaro Wada */
+/* Author: Kentaro Wada, Andy Chien*/
 
-#include "execute_trajectory_action_capability.h"
+#include "moveit_capability/async_execute_trajectory_action_capability.h"
 
 #include <moveit/moveit_cpp/moveit_cpp.h>
 #include <moveit/plan_execution/plan_execution.h>
@@ -45,18 +45,20 @@
 namespace move_group
 {
 static const rclcpp::Logger LOGGER =
-    rclcpp::get_logger("moveit_move_group_default_capabilities.execute_trajectory_action_capability");
+    rclcpp::get_logger("async_execute_trajectory_action_capability");
 
-MoveGroupExecuteTrajectoryAction::MoveGroupExecuteTrajectoryAction() : MoveGroupCapability("ExecuteTrajectoryAction")
+MoveGroupAsyncExecuteTrajectoryAction::MoveGroupAsyncExecuteTrajectoryAction()
+ : MoveGroupCapability("AsyncExecuteTrajectoryAction")
 {
 }
 
-void MoveGroupExecuteTrajectoryAction::initialize()
+void MoveGroupAsyncExecuteTrajectoryAction::initialize()
 {
   using std::placeholders::_1;
   using std::placeholders::_2;
 
   auto node = context_->moveit_cpp_->getNode();
+  cb_group_ = node->create_callback_group(rclcpp::CallbackGroupType::MutuallyExclusive);
   // start the move action server
   execute_action_server_ = rclcpp_action::create_server<ExecTrajectory>(
       node->get_node_base_interface(), node->get_node_clock_interface(), node->get_node_logging_interface(),
@@ -69,10 +71,13 @@ void MoveGroupExecuteTrajectoryAction::initialize()
         RCLCPP_INFO(LOGGER, "Received request to cancel goal");
         return rclcpp_action::CancelResponse::ACCEPT;
       },
-      [this](const auto& goal) { executePathCallback(goal); });
+      [this](const auto& goal) { executePathCallback(goal); },
+      rcl_action_server_get_default_options(), cb_group_);
+
+  RCLCPP_INFO(LOGGER, "========== MoveGroupAsyncExecuteTrajectoryAction is initialized ==========");
 }
 
-void MoveGroupExecuteTrajectoryAction::executePathCallback(std::shared_ptr<ExecTrajectoryGoal> goal)
+void MoveGroupAsyncExecuteTrajectoryAction::executePathCallback(std::shared_ptr<ExecTrajectoryGoal> goal)
 {
   auto action_res = std::make_shared<ExecTrajectory::Result>();
   if (!context_->trajectory_execution_manager_)
@@ -102,7 +107,7 @@ void MoveGroupExecuteTrajectoryAction::executePathCallback(std::shared_ptr<ExecT
   setExecuteTrajectoryState(IDLE, goal);
 }
 
-void MoveGroupExecuteTrajectoryAction::executePath(const std::shared_ptr<ExecTrajectoryGoal>& goal,
+void MoveGroupAsyncExecuteTrajectoryAction::executePath(const std::shared_ptr<ExecTrajectoryGoal>& goal,
                                                    std::shared_ptr<ExecTrajectory::Result>& action_res)
 {
   RCLCPP_INFO(LOGGER, "Execution request received");
@@ -111,8 +116,35 @@ void MoveGroupExecuteTrajectoryAction::executePath(const std::shared_ptr<ExecTra
   if (context_->trajectory_execution_manager_->push(goal->get_goal()->trajectory))
   {
     setExecuteTrajectoryState(MONITOR, goal);
-    context_->trajectory_execution_manager_->execute();
-    moveit_controller_manager::ExecutionStatus status = context_->trajectory_execution_manager_->waitForExecution();
+    moveit_controller_manager::ExecutionStatus status = 
+      moveit_controller_manager::ExecutionStatus::RUNNING;
+    context_->trajectory_execution_manager_->execute(
+      [&status](const moveit_controller_manager::ExecutionStatus& status_in){
+        status = status_in;
+      }
+    );
+    std::size_t points_cnt = goal->get_goal()->trajectory.joint_trajectory.points.size();
+    auto fb = std::make_shared<ExecTrajectory::Feedback>();
+
+    while(status == moveit_controller_manager::ExecutionStatus::RUNNING && rclcpp::ok)
+    {
+      std::this_thread::sleep_for(std::chrono::milliseconds(50));
+
+      const auto& [traj_indx, point_indx] = 
+        context_->trajectory_execution_manager_->getCurrentExpectedTrajectoryIndex();
+      if(traj_indx == -1 && point_indx == -1){
+        continue;
+      }
+
+      fb->state = "RUNNING " + std::to_string(point_indx * 100 / points_cnt) + " / 100, " + \
+        std::to_string(points_cnt - point_indx) + " points left";
+      goal->publish_feedback(fb);
+    }
+
+    if(status == moveit_controller_manager::ExecutionStatus::RUNNING)
+    {
+      status = context_->trajectory_execution_manager_->waitForExecution();
+    }
     if (status == moveit_controller_manager::ExecutionStatus::SUCCEEDED)
     {
       action_res->error_code.val = moveit_msgs::msg::MoveItErrorCodes::SUCCESS;
@@ -137,12 +169,12 @@ void MoveGroupExecuteTrajectoryAction::executePath(const std::shared_ptr<ExecTra
   }
 }
 
-void MoveGroupExecuteTrajectoryAction::preemptExecuteTrajectoryCallback()
+void MoveGroupAsyncExecuteTrajectoryAction::preemptExecuteTrajectoryCallback()
 {
   context_->trajectory_execution_manager_->stopExecution(true);
 }
 
-void MoveGroupExecuteTrajectoryAction::setExecuteTrajectoryState(MoveGroupState state,
+void MoveGroupAsyncExecuteTrajectoryAction::setExecuteTrajectoryState(MoveGroupState state,
                                                                  const std::shared_ptr<ExecTrajectoryGoal>& goal)
 {
   auto execute_feedback = std::make_shared<ExecTrajectory::Feedback>();
@@ -154,4 +186,4 @@ void MoveGroupExecuteTrajectoryAction::setExecuteTrajectoryState(MoveGroupState 
 
 #include <pluginlib/class_list_macros.hpp>
 
-PLUGINLIB_EXPORT_CLASS(move_group::MoveGroupExecuteTrajectoryAction, move_group::MoveGroupCapability)
+PLUGINLIB_EXPORT_CLASS(move_group::MoveGroupAsyncExecuteTrajectoryAction, move_group::MoveGroupCapability)

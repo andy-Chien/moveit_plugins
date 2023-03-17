@@ -1,7 +1,7 @@
 /*********************************************************************
  * Software License Agreement (BSD License)
  *
- *  Copyright (c) 2016, Kentaro Wada.
+ *  Copyright (c) 2008, Willow Garage, Inc.
  *  All rights reserved.
  *
  *  Redistribution and use in source and binary forms, with or without
@@ -32,41 +32,9 @@
  *  POSSIBILITY OF SUCH DAMAGE.
  *********************************************************************/
 
-/*
- * Capability of execute trajectory with a ROS action.
- *
- * Author: Kentaro Wada
- * */
+/* Author: Ioan Sucan */
 
-#pragma once
+#include <class_loader/class_loader.hpp>
+#include <moveit/motion_planning_rviz_plugin/motion_planning_display.h>
 
-#include <moveit/move_group/move_group_capability.h>
-#include <rclcpp_action/rclcpp_action.hpp>
-#include <moveit_msgs/action/execute_trajectory.hpp>
-
-#include <memory>
-
-namespace move_group
-{
-using ExecTrajectory = moveit_msgs::action::ExecuteTrajectory;
-using ExecTrajectoryGoal = rclcpp_action::ServerGoalHandle<ExecTrajectory>;
-
-class MoveGroupAsyncExecuteTrajectoryAction : public MoveGroupCapability
-{
-public:
-  MoveGroupAsyncExecuteTrajectoryAction();
-
-  void initialize() override;
-
-private:
-  void executePathCallback(std::shared_ptr<ExecTrajectoryGoal> goal);
-  void executePath(const std::shared_ptr<ExecTrajectoryGoal>& goal, std::shared_ptr<ExecTrajectory::Result>& action_res);
-
-  void preemptExecuteTrajectoryCallback();
-  void setExecuteTrajectoryState(MoveGroupState state, const std::shared_ptr<ExecTrajectoryGoal>& goal);
-
-  rclcpp::CallbackGroup::SharedPtr cb_group_;
-  std::shared_ptr<rclcpp_action::Server<ExecTrajectory>> execute_action_server_;
-};
-
-}  // namespace move_group
+CLASS_LOADER_REGISTER_CLASS(moveit_rviz_plugin::MotionPlanningDisplay, rviz_common::Display)

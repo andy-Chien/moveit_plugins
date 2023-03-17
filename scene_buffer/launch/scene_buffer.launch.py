@@ -58,8 +58,18 @@ def launch_setup(context, *args, **kwargs):
         output="screen",
     )
 
+    compute_trajectory_length_node = Node(
+        package="scene_buffer",
+        executable="compute_trajectory_length_node",
+        namespace=namespace,
+        parameters=[{"use_sim_time": use_sim_time}, config],
+        # prefix=['xterm -e gdb -ex run --args'],
+        output="screen",
+    )
+
     nodes_to_start = [
         scene_buffer_node,
+        compute_trajectory_length_node
     ]
     return nodes_to_start
 

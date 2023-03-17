@@ -1,7 +1,7 @@
 /*********************************************************************
  * Software License Agreement (BSD License)
  *
- *  Copyright (c) 2016, Kentaro Wada.
+ *  Copyright (c) 2012, Willow Garage, Inc.
  *  All rights reserved.
  *
  *  Redistribution and use in source and binary forms, with or without
@@ -32,41 +32,48 @@
  *  POSSIBILITY OF SUCH DAMAGE.
  *********************************************************************/
 
-/*
- * Capability of execute trajectory with a ROS action.
- *
- * Author: Kentaro Wada
- * */
+/* Author: Robert Haschke */
 
 #pragma once
 
-#include <moveit/move_group/move_group_capability.h>
-#include <rclcpp_action/rclcpp_action.hpp>
-#include <moveit_msgs/action/execute_trajectory.hpp>
+#include <moveit/macros/class_forward.h>
+#include <rviz_common/properties/property_tree_widget.hpp>
 
-#include <memory>
-
-namespace move_group
+namespace moveit
 {
-using ExecTrajectory = moveit_msgs::action::ExecuteTrajectory;
-using ExecTrajectoryGoal = rclcpp_action::ServerGoalHandle<ExecTrajectory>;
-
-class MoveGroupAsyncExecuteTrajectoryAction : public MoveGroupCapability
+namespace planning_interface
 {
+MOVEIT_CLASS_FORWARD(MoveGroupInterface);  // Defines MoveGroupInterfacePtr, ConstPtr, WeakPtr... etc
+}
+}  // namespace moveit
+
+namespace moveit_rviz_plugin
+{
+class MotionPlanningParamWidget : public rviz_common::properties::PropertyTreeWidget
+{
+  Q_OBJECT
 public:
-  MoveGroupAsyncExecuteTrajectoryAction();
+  MotionPlanningParamWidget(const MotionPlanningParamWidget&) = delete;
+  MotionPlanningParamWidget(QWidget* parent = nullptr);
+  ~MotionPlanningParamWidget() override;
 
-  void initialize() override;
+  void setMoveGroup(const moveit::planning_interface::MoveGroupInterfacePtr& mg);
+  void setGroupName(const std::string& group_name);
+
+public Q_SLOTS:
+  void setPlannerId(const std::string& planner_id);
+
+private Q_SLOTS:
+  void changedValue();
 
 private:
-  void executePathCallback(std::shared_ptr<ExecTrajectoryGoal> goal);
-  void executePath(const std::shared_ptr<ExecTrajectoryGoal>& goal, std::shared_ptr<ExecTrajectory::Result>& action_res);
+  rviz_common::properties::Property* createPropertyTree();
 
-  void preemptExecuteTrajectoryCallback();
-  void setExecuteTrajectoryState(MoveGroupState state, const std::shared_ptr<ExecTrajectoryGoal>& goal);
+private:
+  rviz_common::properties::PropertyTreeModel* property_tree_model_;
 
-  rclcpp::CallbackGroup::SharedPtr cb_group_;
-  std::shared_ptr<rclcpp_action::Server<ExecTrajectory>> execute_action_server_;
+  moveit::planning_interface::MoveGroupInterfacePtr move_group_;
+  std::string group_name_;
+  std::string planner_id_;
 };
-
-}  // namespace move_group
+}  // namespace moveit_rviz_plugin
