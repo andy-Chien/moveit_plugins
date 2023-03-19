@@ -220,14 +220,6 @@ bool SceneBuffer::get_obstacle_cb(
       return true;
     };
 
-  const auto& get_tarj_start_time = [](const auto& trajectory){
-    return rclcpp::Time(trajectory->header.stamp);
-  };
-  const auto& tarj_last_time = [&get_tarj_start_time](const auto& trajectory){
-    return rclcpp::Time(get_tarj_start_time(trajectory) + rclcpp::Duration(
-      trajectory->points.back().time_from_start));
-  };
-
   const auto& get_link_poses_from_state = [&eigen_to_msg, &pose_adjust](
     const std::shared_ptr<Robot>& robot, std::vector<Eigen::Isometry3d>& last_trans){
       const size_t mesh_links_size = robot->mesh_links.size();
@@ -264,13 +256,6 @@ bool SceneBuffer::get_obstacle_cb(
       }
     };
 
-  const auto& check_last_time = 
-    [&get_tarj_start_time, &tarj_last_time](
-      const rclcpp::Time& t, const rclcpp::Duration& delay_time, const auto& traj){
-      return (get_tarj_start_time(traj).nanoseconds() > 
-        0 && t > tarj_last_time(traj) + delay_time);
-    };
-
   const auto& check_running_time_with_delay = 
     [this](const rclcpp::Time& start_time, const rclcpp::Time& tarj_start_time, const auto& point){
       return start_time > (tarj_start_time + 
@@ -278,17 +263,18 @@ bool SceneBuffer::get_obstacle_cb(
     };
 
   const auto& get_pose_from_trajectory = 
-    [&check_running_time_with_delay, &get_link_poses_from_state, &get_tarj_start_time](
+    [&check_running_time_with_delay, &get_link_poses_from_state](
       const auto& robot, const auto&  trajectory, const auto& start_time, bool running_traj){
         if(!trajectory){
           return;
         }
         std::vector<Eigen::Isometry3d> last_trans;
         const auto& traj_joint_names = trajectory->joint_names;
-        const auto& tarj_start_time = get_tarj_start_time(trajectory);
+        const auto& tarj_start_time = rclcpp::Time(trajectory->header.stamp);
         for(const auto& point : trajectory->points)
         {
-          if(running_traj && 
+          // always keep last ponits for running trajectory
+          if(running_traj && point != trajectory->points.back() &&
             check_running_time_with_delay(start_time, tarj_start_time, point)){
             continue;
           }
@@ -330,7 +316,16 @@ bool SceneBuffer::get_obstacle_cb(
     RCLCPP_INFO(get_logger(), "Waiting for other planning");
   }
 
-  const rclcpp::Time start_time = this->now();
+  const rclcpp::Time start_time = [this, &req_robot_name]{
+    const rclcpp::Time& now = this->now();
+    const auto& traj = robots_.at(req_robot_name)->running_trajectory;
+    if(!traj){
+      return now;
+    }
+    const rclcpp::Time& traj_end = rclcpp::Time(traj->header.stamp) + 
+      rclcpp::Duration(traj->points.back().time_from_start);
+    return (traj_end > now) ? traj_end : now;
+  }();
 
   const auto& collision_robots =
     params_.collision_maps.robot_names_map.at(req_robot_name).collision_robots;
