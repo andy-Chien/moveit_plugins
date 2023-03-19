@@ -51,6 +51,9 @@ namespace planning_adapter
 rclcpp::Logger logger(rclcpp::get_logger("plan_adapter.trajectory_obstacles"));
 std::string get_obs_service_name("/get_trajectory_obstacle");
 std::string set_traj_service_name("/set_trajectory_state");
+int service_connect_timeout(500); //0.5s
+int service_response_timeout(10000); //10s
+int service_waiting_loop_time(500); //0.5s
 
 class AddTrajectoryObstacles : public planning_request_adapter::PlanningRequestAdapter
 {
@@ -77,17 +80,29 @@ public:
         traj_req->action = mr_msgs::srv::SetTrajectoryState::Request::PLANNING_FAILED;
       }
 
-      if(!set_traj_client_->wait_for_service(std::chrono::milliseconds(500))){
-        RCLCPP_ERROR(logger,
+      if(!set_traj_client_->wait_for_service(std::chrono::milliseconds(service_connect_timeout))){
+        RCLCPP_WARN(logger,
           "'%s' wait for service '%s' failed!", robot_name_.c_str(), set_traj_service_name.c_str());
         res.error_code_.val = moveit_msgs::msg::MoveItErrorCodes::FAILURE;
         return false;
       }
       std::shared_future<std::shared_ptr<mr_msgs::srv::SetTrajectoryState_Response>> 
         set_traj_future = set_traj_client_->async_send_request(traj_req).future.share();
-      while(set_traj_future.wait_for(std::chrono::milliseconds(500)) == std::future_status::timeout){
+
+      for(uint8_t i=0; i<service_response_timeout / service_waiting_loop_time; i++)
+      {
+        if(set_traj_future.wait_for(
+          std::chrono::milliseconds(service_waiting_loop_time)) != std::future_status::timeout){
+          break;
+        }
         RCLCPP_WARN(logger, 
           "'%s' waiting for the response from set traj service!", robot_name_.c_str());
+        if(i + 1 == service_response_timeout / service_waiting_loop_time){
+          RCLCPP_ERROR(logger, 
+            "'%s' service '%s' time out!", robot_name_.c_str(), get_obs_service_name.c_str());
+          res.error_code_.val = moveit_msgs::msg::MoveItErrorCodes::FAILURE;
+          return false;
+        }
       }
       if(!set_traj_future.get()->success){
         RCLCPP_ERROR(logger, "'%s' set planned trajectory failed!", robot_name_.c_str());
@@ -132,35 +147,47 @@ public:
       return result;
     };
 
-    if(!get_obs_client_->wait_for_service(std::chrono::milliseconds(500))){
-      RCLCPP_ERROR(logger,
+    if(!get_obs_client_->wait_for_service(std::chrono::milliseconds(service_connect_timeout))){
+      RCLCPP_WARN(logger,
         "'%s' wait for service '%s' failed!", robot_name_.c_str(), get_obs_service_name.c_str());
+      res.error_code_.val = moveit_msgs::msg::MoveItErrorCodes::FAILURE;
       return clear_and_return(false);
     }
     std::shared_future<std::shared_ptr<mr_msgs::srv::GetRobotTrajectoryObstacle_Response>> 
       get_obs_future = get_obs_client_->async_send_request(obs_req).future.share();
 
-    if(get_obs_future.wait_for(std::chrono::seconds(3)) != std::future_status::timeout)
+    for(uint8_t i=0; i<service_response_timeout / service_waiting_loop_time; i++)
     {
-      for(const auto& obs : get_obs_future.get()->obstacles_list){
-        std::vector<shapes::ShapeConstPtr> shapes;
-        EigenSTL::vector_Isometry3d shape_poses;
-
-        if(!shapesAndPosesFromObstacles(obs, shapes, shape_poses)){
-          RCLCPP_ERROR(logger, "'%s' add obstacles failed!", robot_name_.c_str());
-          set_trajectory_state(false);
-          return clear_and_return(false);
-        }
-        const Eigen::Isometry3d& world_to_object_header_transform = 
-          planning_scene->getFrameTransform(obs.header.frame_id);
-        world->addToObject(
-          obs.name, world_to_object_header_transform, shapes, shape_poses);
+      if(get_obs_future.wait_for(
+        std::chrono::milliseconds(service_waiting_loop_time)) != std::future_status::timeout){
+        break;
       }
-    }else{
-      RCLCPP_ERROR(logger, 
-        "'%s' service '%s' time out!", robot_name_.c_str(), get_obs_service_name.c_str());
-      set_trajectory_state(false);
-      return clear_and_return(false);
+      RCLCPP_WARN(logger, 
+        "'%s' waiting for the response from get obstacles service!", robot_name_.c_str());
+      if(i + 1 == service_response_timeout / service_waiting_loop_time){
+        RCLCPP_ERROR(logger, 
+          "'%s' service '%s' time out!", robot_name_.c_str(), get_obs_service_name.c_str());
+        res.error_code_.val = moveit_msgs::msg::MoveItErrorCodes::FAILURE;
+        return clear_and_return(false);
+      }
+    }
+
+    for(const auto& obs : get_obs_future.get()->obstacles_list)
+    {
+      std::vector<shapes::ShapeConstPtr> shapes;
+      EigenSTL::vector_Isometry3d shape_poses;
+
+      if(!shapesAndPosesFromObstacles(obs, shapes, shape_poses))
+      {
+        RCLCPP_ERROR(logger, "'%s' add obstacles failed!", robot_name_.c_str());
+        res.error_code_.val = moveit_msgs::msg::MoveItErrorCodes::FAILURE;
+        set_trajectory_state(false);
+        return clear_and_return(false);
+      }
+      const Eigen::Isometry3d& world_to_object_header_transform = 
+        planning_scene->getFrameTransform(obs.header.frame_id);
+      world->addToObject(
+        obs.name, world_to_object_header_transform, shapes, shape_poses);
     }
 
     rclcpp::Time t_end = this_node_->now();
@@ -171,18 +198,18 @@ public:
     // (*planning_scene_)->allocateCollisionDetector(collision_detection::CollisionDetectorAllocatorFCL::create());
     
     if(!planner(*planning_scene_, req, res)){
-      std::cout<<"res.error_code_.val = "<<res.error_code_.val<<std::endl;
+      // std::cout<<"res.error_code_.val = "<<res.error_code_.val<<std::endl;
       set_trajectory_state(false);
       return clear_and_return(false);
     }
 
-    std::cout<<"getCollisionDetectorName() = "<<(*planning_scene_)->getCollisionDetectorName()<<std::endl;
-    std::cout<<"getCollisionDetectorName() = "<<planning_scene->getCollisionDetectorName()<<std::endl;
-    std::cout<<"isStateColliding = "<<(*planning_scene_)->isStateColliding((*planning_scene_)->getCurrentState(), "ur_manipulator", true)<<std::endl;
-    std::cout<<"isStateColliding = "<<planning_scene->isStateColliding(planning_scene->getCurrentState(), "ur_manipulator", true)<<std::endl;
-    std::cout<<"world->size() = "<<world->size()<<std::endl;
-    std::cout<<"planning_scene->getWorld()->size() = "<<planning_scene->getWorld()->size()<<std::endl;
-    std::cout<<"(*planning_scene_)->getWorld->size() = "<<(*planning_scene_)->getWorld()->size()<<std::endl;
+    // std::cout<<"getCollisionDetectorName() = "<<(*planning_scene_)->getCollisionDetectorName()<<std::endl;
+    // std::cout<<"getCollisionDetectorName() = "<<planning_scene->getCollisionDetectorName()<<std::endl;
+    // std::cout<<"isStateColliding = "<<(*planning_scene_)->isStateColliding((*planning_scene_)->getCurrentState(), "ur_manipulator", true)<<std::endl;
+    // std::cout<<"isStateColliding = "<<planning_scene->isStateColliding(planning_scene->getCurrentState(), "ur_manipulator", true)<<std::endl;
+    // std::cout<<"world->size() = "<<world->size()<<std::endl;
+    // std::cout<<"planning_scene->getWorld()->size() = "<<planning_scene->getWorld()->size()<<std::endl;
+    // std::cout<<"(*planning_scene_)->getWorld->size() = "<<(*planning_scene_)->getWorld()->size()<<std::endl;
     // auto obj_ids = (*planning_scene_)->getWorld()->getObjectIds();
     // for(const auto& obj_id : obj_ids)
     // {
