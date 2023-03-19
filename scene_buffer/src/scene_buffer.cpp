@@ -301,19 +301,22 @@ bool SceneBuffer::get_obstacle_cb(
     return false;
   }
 
-  const auto try_to_set_some_one_is_planning = [this](const std::string& name){
+  const auto try_to_set_some_one_is_planning = [this](const std::string& name, std::string& planning_name){
     const std::lock_guard<std::mutex> planning_lock(some_one_is_planning_mutex_);
-    if(some_one_is_planning_ == ""){
+    if(some_one_is_planning_ == "" || some_one_is_planning_ == name){
       some_one_is_planning_ = name;
       return true;
     }else{
+      planning_name = some_one_is_planning_;
       return false;
     }
   };
 
-  while(!try_to_set_some_one_is_planning(req_robot_name)){
+  std::string now_planning("");
+  while(!try_to_set_some_one_is_planning(req_robot_name, now_planning)){
     std::this_thread::sleep_for(std::chrono::milliseconds(50));
-    RCLCPP_INFO(get_logger(), "Waiting for other planning");
+    RCLCPP_INFO(get_logger(), 
+      "%s Waiting for %s planning", req_robot_name.c_str(), now_planning.c_str());
   }
 
   const rclcpp::Time start_time = [this, &req_robot_name]{
