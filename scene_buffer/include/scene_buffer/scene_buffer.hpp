@@ -68,6 +68,10 @@ public:
       }
     }
 
+    std::shared_mutex& get_trajectory_data_mutex(){
+      return trajectory_data_mutex_;
+    }
+
     moveit::core::RobotModelPtr model;
     moveit::core::RobotStatePtr state;
     mr_msgs::msg::Obstacles obstacles;
@@ -89,6 +93,7 @@ public:
     std::vector<double> jnt_pos_;
     std::vector<std::string> jnt_names_;
     std::shared_mutex jnt_data_mutex_;
+    std::shared_mutex trajectory_data_mutex_;
     rclcpp::AsyncParametersClient::SharedPtr param_client_;
     rclcpp::Subscription<sensor_msgs::msg::JointState>::SharedPtr jnt_states_sub_;
     rclcpp::Publisher<MarkerArray>::SharedPtr obstacles_publisher_;
@@ -112,7 +117,6 @@ private:
   
   std::string some_one_is_planning_;
   std::mutex some_one_is_planning_mutex_;
-  std::shared_mutex trajectory_data_mutex_;
   rclcpp::CallbackGroup::SharedPtr cb_group_;
 
   std::unique_ptr<rclcpp::Duration> delay_duration_;

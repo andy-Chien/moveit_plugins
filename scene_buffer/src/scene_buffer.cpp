@@ -343,16 +343,7 @@ bool SceneBuffer::get_obstacle_cb(
     const auto& other_robot = robots_.at(other_name);
     other_robot->clean_poses();
 
-    {
-      const std::lock_guard<std::shared_mutex> data_lock(trajectory_data_mutex_);
-      if(other_robot->running_trajectory && 
-        check_last_time(start_time, *delay_duration_, other_robot->running_trajectory))
-      {
-        other_robot->running_trajectory = nullptr;
-      }
-    }
-
-    const std::shared_lock<std::shared_mutex> data_lock(trajectory_data_mutex_);
+    const std::shared_lock<std::shared_mutex> data_lock(other_robot->get_trajectory_data_mutex());
 
     if(!(other_robot->planned_trajectory || other_robot->running_trajectory))
     {
@@ -494,11 +485,9 @@ bool SceneBuffer::set_trajectory_cb(
     }
   }(req->header.frame_id);
 
-  const std::lock_guard<std::shared_mutex> data_lock(trajectory_data_mutex_);
-
-  rclcpp::Time t;
-
   const auto& robot = robots_.at(req_robot_name);
+  const std::lock_guard<std::shared_mutex> data_lock(robot->get_trajectory_data_mutex());
+  
   res->success = true;
   switch (req->action)
   {
@@ -515,7 +504,6 @@ bool SceneBuffer::set_trajectory_cb(
   case TrajectorySrv::Request::MARK_TRAJECTORY_START_TIME:
     robot->running_trajectory = robot->planned_trajectory;
     robot->running_trajectory->header.stamp = req->header.stamp;
-    t = rclcpp::Time(robot->running_trajectory->header.stamp);
     robot->planned_trajectory = nullptr;
     break;
 
