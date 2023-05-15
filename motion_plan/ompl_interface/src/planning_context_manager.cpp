@@ -81,6 +81,7 @@
 
 // Andy Chien ----------------------------------------------------
 #include "motion_plan/adapt_prm/adapt_prm.h"
+#include "motion_plan/adapt_prm/adapt_lazy_prm.h"
 // ---------------------------------------------------------------
 
 using namespace std::placeholders;
@@ -257,6 +258,12 @@ MultiQueryPlannerAllocator::allocatePersistentPlanner<ompl::geometric::AdaptPRM>
 {
   return new og::AdaptPRM(data);
 };
+template <>
+inline ompl::base::Planner*
+MultiQueryPlannerAllocator::allocatePersistentPlanner<ompl::geometric::AdaptLazyPRM>(const ob::PlannerData& data)
+{
+  return new og::AdaptLazyPRM(data);
+};
 // ---------------------------------------------------------------
 
 PlanningContextManager::PlanningContextManager(moveit::core::RobotModelConstPtr robot_model,
@@ -329,6 +336,7 @@ void PlanningContextManager::registerDefaultPlanners()
   registerPlannerAllocatorHelper<og::TRRT>("geometric::TRRT");
   // Andy Chien ----------------------------------------------------
   registerPlannerAllocatorHelper<og::AdaptPRM>("geometric::AdaptPRM");
+  registerPlannerAllocatorHelper<og::AdaptLazyPRM>("geometric::AdaptLazyPRM");
   // ---------------------------------------------------------------
 }
 

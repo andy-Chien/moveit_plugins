@@ -71,6 +71,7 @@
 #include "motion_plan/ompl_interface/detail/motion_validity_checker.h"
 #include "motion_plan/objectives/PathLengthUtilizationOptimizationObjective.h"
 #include "motion_plan/adapt_prm/adapt_prm.h"
+#include "motion_plan/adapt_prm/adapt_lazy_prm.h"
 // ---------------------------------------------------------------
 #include <ompl/geometric/planners/prm/LazyPRM.h>
 
@@ -693,6 +694,13 @@ void ompl_interface::ModelBasedPlanningContext::clear()
     if (name_.find("AdaptPRM") != std::string::npos)
     {
       auto planner = dynamic_cast<ompl::geometric::AdaptPRM*>(ompl_simple_setup_->getPlanner().get());
+      if (planner != nullptr){
+        planner->clearValidity();
+      }
+    }
+    else if (name_.find("AdaptLazyPRM") != std::string::npos)
+    {
+      auto planner = dynamic_cast<ompl::geometric::AdaptLazyPRM*>(ompl_simple_setup_->getPlanner().get());
       if (planner != nullptr){
         planner->clearValidity();
       }
