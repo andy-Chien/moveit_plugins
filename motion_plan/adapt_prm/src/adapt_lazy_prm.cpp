@@ -41,6 +41,12 @@
 #else
 #include <ompl/base/objectives/PathLengthOptimizationObjective.h>
 #endif
+
+#if defined(__has_include) && __has_include("motion_plan/ompl_interface/parameterization/model_based_state_space.h")
+#include "motion_plan/ompl_interface/parameterization/model_based_state_space.h"
+#define USING_MB_SS
+#endif
+
 #include <ompl/base/goals/GoalSampleableRegion.h>
 #include <ompl/geometric/planners/prm/ConnectionStrategy.h>
 #include <ompl/tools/config/SelfConfig.h>
@@ -416,11 +422,14 @@ ompl::base::PlannerStatus ompl::geometric::AdaptLazyPRM::solve(const base::Plann
     base::State *workState = si_->allocState();
     std::pair<std::size_t, std::size_t> startGoalPair;
     base::PathPtr bestSolution;
-    bool fullyOptimized = false;
     bool someSolutionFound = false;
+    bool fullyOptimized = false;
+    bool setBounds = true;
     unsigned int optimizingComponentSegments = 0;
     unsigned int optimizingSolutions = 0;
     iterations_ = 0;
+
+    base::PathPtr solution;
 
     // Grow roadmap in lazy fashion -- add vertices and edges without checking validity
     while (!ptc)
@@ -432,6 +441,10 @@ ompl::base::PlannerStatus ompl::geometric::AdaptLazyPRM::solve(const base::Plann
         {
             if (++iterations_ > magic::MAX_VERTICES)
                 break;
+            if (someSolutionFound && solution && setBounds){
+                setBounds = false;
+                computeAndSetBounds(solution);
+            }
             sampler_->sampleUniform(workState);
             Vertex addedVertex = addMilestone(si_->cloneState(workState));
             new_vertex_component = (long int)vertexComponentProperty_[addedVertex] == solComponent;
@@ -464,7 +477,6 @@ ompl::base::PlannerStatus ompl::geometric::AdaptLazyPRM::solve(const base::Plann
             }
             Vertex startV = startM_[startGoalPair.first];
             Vertex goalV = goalM_[startGoalPair.second];
-            base::PathPtr solution;
 
             solution = constructSolution(startV, goalV);
 
@@ -493,6 +505,8 @@ ompl::base::PlannerStatus ompl::geometric::AdaptLazyPRM::solve(const base::Plann
         }
     }
     si_->freeState(workState);
+    resetBounds();
+
     if (bestSolution && this->isAcceptable(bestCost_))
     {
         updateUtilization();
@@ -904,6 +918,49 @@ ompl::base::Cost ompl::geometric::AdaptLazyPRM::costHeuristic(Vertex u, Vertex v
 void ompl::geometric::AdaptLazyPRM::explorationCondition()
 {
    return;
+}
+#endif
+
+#ifdef USING_MB_SS
+void ompl::geometric::AdaptLazyPRM::computeAndSetBounds(const base::PathPtr p)
+{
+    std::vector<double> min, max;
+    bool is_first = true;
+
+    for(size_t i=0; i<std::static_pointer_cast<geometric::PathGeometric>(p)->getStateCount(); i++)
+    {
+        const base::State* s = std::static_pointer_cast<geometric::PathGeometric>(p)->getState(i);
+        std::vector<double> values;
+        si_->getStateSpace()->as<ompl_interface::ModelBasedStateSpace>()->getStateValues(s, values);
+        if(is_first)
+        {
+            is_first = false;
+            min.resize(values.size());
+            max.resize(values.size());
+            for(size_t j=0; j<values.size(); j++)
+            {
+                min[j] = 999999;
+                max[j] = -999999;
+            }
+        }
+        min[i] = std::min(min[i], values[i]);
+        max[i] = std::max(max[i], values[i]);
+    }
+    si_->getStateSpace()->as<ompl_interface::ModelBasedStateSpace>()->setJointsPosBounds(min, max);
+}
+
+void ompl::geometric::AdaptLazyPRM::resetBounds()
+{
+    si_->getStateSpace()->as<ompl_interface::ModelBasedStateSpace>()->resetJointsPosBounds();
+}
+#else
+void ompl::geometric::AdaptLazyPRM::computeAndSetBounds(const base::PathPtr p)
+{
+    return;
+}
+void ompl::geometric::AdaptLazyPRM::resetBounds()
+{
+    return;
 }
 #endif
 

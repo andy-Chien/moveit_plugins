@@ -329,6 +329,10 @@ namespace ompl
 
             void explorationCondition();
 
+            void computeAndSetBounds(const base::PathPtr p);
+            
+            void resetBounds();
+
             /** \brief Flag indicating whether the default connection strategy is the Star strategy */
             bool starStrategy_;
 

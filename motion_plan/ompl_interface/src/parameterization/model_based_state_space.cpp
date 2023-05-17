@@ -34,8 +34,9 @@
 
 /* Author: Ioan Sucan */
 
-#include <moveit/ompl_interface/parameterization/model_based_state_space.h>
+// #include <moveit/ompl_interface/parameterization/model_based_state_space.h>
 #include <utility>
+#include "motion_plan/ompl_interface/parameterization/model_based_state_space.h"
 
 namespace ompl_interface
 {
@@ -65,8 +66,10 @@ ompl_interface::ModelBasedStateSpace::ModelBasedStateSpace(ModelBasedStateSpaceS
 
   // new perform a deep copy of the bounds, in case we need to modify them
   joint_bounds_storage_.resize(spec_.joint_bounds_.size());
+  joint_bounds_backup_.resize(spec_.joint_bounds_.size());
   for (std::size_t i = 0; i < joint_bounds_storage_.size(); ++i)
   {
+    joint_bounds_backup_[i] = *spec_.joint_bounds_[i];
     joint_bounds_storage_[i] = *spec_.joint_bounds_[i];
     spec_.joint_bounds_[i] = &joint_bounds_storage_[i];
   }
@@ -316,6 +319,15 @@ void ompl_interface::ModelBasedStateSpace::printState(const ompl::base::State* s
       out << "* invalid state \n";
   }
   out << "Tag: " << state->as<StateType>()->tag << '\n';
+}
+
+void ompl_interface::ModelBasedStateSpace::getStateValues(const ompl::base::State* state, std::vector<double>& values)
+{
+  values.clear();
+  const double* v = state->as<StateType>()->values;
+  for (unsigned int i = 0; i < variable_count_; ++i){
+    values.push_back(v[i]);
+  }
 }
 
 void ompl_interface::ModelBasedStateSpace::copyToRobotState(moveit::core::RobotState& rstate,

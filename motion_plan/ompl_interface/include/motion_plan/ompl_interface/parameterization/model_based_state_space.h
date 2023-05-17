@@ -225,12 +225,36 @@ public:
   void printState(const ompl::base::State* state, std::ostream& out) const override;
   void printSettings(std::ostream& out) const override;
 
+  void getStateValues(const ompl::base::State* state, std::vector<double>& values);
+
   /// Set the planning volume for the possible SE2 and/or SE3 components of the state space
   virtual void setPlanningVolume(double minX, double maxX, double minY, double maxY, double minZ, double maxZ);
 
   const moveit::core::JointBoundsVector& getJointsBounds() const
   {
     return spec_.joint_bounds_;
+  }
+
+  void setJointsPosBounds(std::vector<double>& min, std::vector<double>& max)
+  {
+    size_t num = joint_bounds_storage_.size();
+    if(num != min.size() || num != max.size()){
+      return;
+    }
+    for(size_t i=0; i<num; i++)
+    {
+      joint_bounds_storage_[i][0].min_position_ = min[i];
+      joint_bounds_storage_[i][0].max_position_ = max[i];
+    }
+  }
+
+  void resetJointsPosBounds()
+  {
+    for(size_t i=0; i<joint_bounds_storage_.size(); i++)
+    {
+      joint_bounds_storage_[i][0].min_position_ = joint_bounds_backup_[i][0].min_position_;
+      joint_bounds_storage_[i][0].max_position_ = joint_bounds_backup_[i][0].max_position_;
+    }
   }
 
   /// Copy the data from an OMPL state to a set of joint states.
@@ -259,6 +283,7 @@ public:
 
 protected:
   ModelBasedStateSpaceSpecification spec_;
+  std::vector<moveit::core::JointModel::Bounds> joint_bounds_backup_;
   std::vector<moveit::core::JointModel::Bounds> joint_bounds_storage_;
   std::vector<const moveit::core::JointModel*> joint_model_vector_;
   unsigned int variable_count_;
