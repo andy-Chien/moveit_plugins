@@ -71,17 +71,22 @@
 #include <ompl/base/ConstrainedSpaceInformation.h>
 #include <ompl/base/spaces/constraint/ProjectedStateSpace.h>
 
-#include <moveit/ompl_interface/parameterization/joint_space/joint_model_state_space_factory.h>
-#include <moveit/ompl_interface/parameterization/joint_space/joint_model_state_space.h>
-#include <moveit/ompl_interface/parameterization/joint_space/constrained_planning_state_space_factory.h>
-#include <moveit/ompl_interface/parameterization/joint_space/constrained_planning_state_space.h>
-#include <moveit/ompl_interface/parameterization/work_space/pose_model_state_space_factory.h>
+// #include <moveit/ompl_interface/parameterization/joint_space/joint_model_state_space_factory.h>
+// #include <moveit/ompl_interface/parameterization/joint_space/joint_model_state_space.h>
+// #include <moveit/ompl_interface/parameterization/joint_space/constrained_planning_state_space_factory.h>
+// #include <moveit/ompl_interface/parameterization/joint_space/constrained_planning_state_space.h>
+// #include <moveit/ompl_interface/parameterization/work_space/pose_model_state_space_factory.h>
 #include <moveit/ompl_interface/detail/ompl_constraints.h>
 
 
 // Andy Chien ----------------------------------------------------
 #include "motion_plan/adapt_prm/adapt_prm.h"
 #include "motion_plan/adapt_prm/adapt_lazy_prm.h"
+#include "motion_plan/ompl_interface/parameterization/joint_space/joint_model_state_space_factory.h"
+#include "motion_plan/ompl_interface/parameterization/joint_space/joint_model_state_space.h"
+#include "motion_plan/ompl_interface/parameterization/joint_space/constrained_planning_state_space_factory.h"
+#include "motion_plan/ompl_interface/parameterization/joint_space/constrained_planning_state_space.h"
+#include "motion_plan/ompl_interface/parameterization/work_space/pose_model_state_space_factory.h"
 // ---------------------------------------------------------------
 
 using namespace std::placeholders;

@@ -35,8 +35,8 @@
 /* Author: Jeroen De Maeyer */
 /* Mostly copied from Ioan Sucan's code */
 
-#include <moveit/ompl_interface/parameterization/joint_space/constrained_planning_state_space.h>
-#include <moveit/ompl_interface/parameterization/joint_space/constrained_planning_state_space_factory.h>
+#include "motion_plan/ompl_interface/parameterization/joint_space/constrained_planning_state_space.h"
+#include "motion_plan/ompl_interface/parameterization/joint_space/constrained_planning_state_space_factory.h"
 
 namespace ompl_interface
 {

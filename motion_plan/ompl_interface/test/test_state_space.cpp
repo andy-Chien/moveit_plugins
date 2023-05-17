@@ -36,8 +36,8 @@
 
 #include <limits>
 
-#include <moveit/ompl_interface/parameterization/joint_space/joint_model_state_space.h>
-#include <moveit/ompl_interface/parameterization/work_space/pose_model_state_space.h>
+#include "motion_plan/ompl_interface/parameterization/joint_space/joint_model_state_space.h"
+#include "motion_plan/ompl_interface/parameterization/work_space/pose_model_state_space.h"
 
 #include <urdf_parser/urdf_parser.h>
 

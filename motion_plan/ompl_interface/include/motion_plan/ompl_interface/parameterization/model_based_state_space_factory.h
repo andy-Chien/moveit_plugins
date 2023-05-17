@@ -37,7 +37,8 @@
 #pragma once
 
 #include <moveit/macros/class_forward.h>
-#include <moveit/ompl_interface/parameterization/model_based_state_space.h>
+// #include <moveit/ompl_interface/parameterization/model_based_state_space.h>
+#include "motion_plan/ompl_interface/parameterization/model_based_state_space.h"
 #include <moveit_msgs/msg/motion_plan_request.hpp>
 
 namespace ompl_interface

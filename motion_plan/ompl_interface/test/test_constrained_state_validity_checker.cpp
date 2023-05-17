@@ -45,7 +45,7 @@
 #include <moveit/ompl_interface/detail/state_validity_checker.h>
 // #include <moveit/ompl_interface/model_based_planning_context.h>
 #include "motion_plan/ompl_interface/model_based_planning_context.h"
-#include <moveit/ompl_interface/parameterization/joint_space/constrained_planning_state_space.h>
+#include "motion_plan/ompl_interface/parameterization/joint_space/constrained_planning_state_space.h"
 #include <moveit/planning_scene/planning_scene.h>
 
 #include <ompl/geometric/SimpleSetup.h>

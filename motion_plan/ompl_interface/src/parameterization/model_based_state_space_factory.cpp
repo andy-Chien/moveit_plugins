@@ -34,7 +34,7 @@
 
 /* Author: Ioan Sucan */
 
-#include <moveit/ompl_interface/parameterization/model_based_state_space_factory.h>
+#include "motion_plan/ompl_interface/parameterization/model_based_state_space_factory.h"
 
 ompl_interface::ModelBasedStateSpacePtr
 ompl_interface::ModelBasedStateSpaceFactory::getNewStateSpace(const ModelBasedStateSpaceSpecification& space_spec) const
