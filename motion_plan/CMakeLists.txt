@@ -9,6 +9,8 @@ if(CMAKE_CXX_COMPILER_ID MATCHES "(GNU|Clang)")
     add_compile_options(-Wno-overloaded-virtual)
 endif()
 
+# add_compile_options(-g)
+
 set(THIS_PACKAGE_INCLUDE_DEPENDS
   moveit_core
   moveit_ros_planning

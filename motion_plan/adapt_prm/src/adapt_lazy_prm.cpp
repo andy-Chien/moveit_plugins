@@ -429,8 +429,6 @@ ompl::base::PlannerStatus ompl::geometric::AdaptLazyPRM::solve(const base::Plann
     unsigned int optimizingSolutions = 0;
     iterations_ = 0;
 
-    base::PathPtr solution;
-
     // Grow roadmap in lazy fashion -- add vertices and edges without checking validity
     while (!ptc)
     {
@@ -441,9 +439,9 @@ ompl::base::PlannerStatus ompl::geometric::AdaptLazyPRM::solve(const base::Plann
         {
             if (++iterations_ > magic::MAX_VERTICES)
                 break;
-            if (someSolutionFound && solution && setBounds){
+            if (bestSolution && setBounds){
                 setBounds = false;
-                computeAndSetBounds(solution);
+                computeAndSetBounds(bestSolution);
             }
             sampler_->sampleUniform(workState);
             Vertex addedVertex = addMilestone(si_->cloneState(workState));
@@ -477,6 +475,7 @@ ompl::base::PlannerStatus ompl::geometric::AdaptLazyPRM::solve(const base::Plann
             }
             Vertex startV = startM_[startGoalPair.first];
             Vertex goalV = goalM_[startGoalPair.second];
+            base::PathPtr solution;
 
             solution = constructSolution(startV, goalV);
 
@@ -943,8 +942,11 @@ void ompl::geometric::AdaptLazyPRM::computeAndSetBounds(const base::PathPtr p)
                 max[j] = -999999;
             }
         }
-        min[i] = std::min(min[i], values[i]);
-        max[i] = std::max(max[i], values[i]);
+        for(size_t j=0; j<values.size(); j++)
+        {
+            min[j] = std::min(min[j], values[j]);
+            max[j] = std::max(max[j], values[j]);
+        }
     }
     si_->getStateSpace()->as<ompl_interface::ModelBasedStateSpace>()->setJointsPosBounds(min, max);
 }
