@@ -42,11 +42,11 @@ def launch_setup(context, *args, **kwargs):
 
     namespace = LaunchConfiguration("namespace")
     use_sim_time = LaunchConfiguration("use_sim_time")
-    config_file = LaunchConfiguration("scene_buffer_config_file")
-    scene_buffer_config_package = LaunchConfiguration("scene_buffer_config_package")
+    config_file = LaunchConfiguration("config_file")
+    config_package = LaunchConfiguration("config_package")
 
     config = PathJoinSubstitution(
-        [FindPackageShare(scene_buffer_config_package), "config/", config_file]
+        [FindPackageShare(config_package), "config/", config_file]
     )
 
     scene_buffer_node = Node(
@@ -78,7 +78,7 @@ def generate_launch_description():
     declared_arguments = []
     declared_arguments.append(
         DeclareLaunchArgument(
-            "scene_buffer_config_package",
+            "config_package",
             default_value="scene_buffer",
             description="The package that config file come from",
         )
@@ -86,8 +86,8 @@ def generate_launch_description():
 
     declared_arguments.append(
         DeclareLaunchArgument(
-            "scene_buffer_config_file",
-            default_value="config.yaml",
+            "config_file",
+            default_value="dual_arm_config.yaml",
             description="YAML file with the joystick configuration.",
         )
     )
