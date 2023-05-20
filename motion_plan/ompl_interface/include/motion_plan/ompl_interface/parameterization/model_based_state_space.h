@@ -235,7 +235,7 @@ public:
     return spec_.joint_bounds_;
   }
 
-  void setJointsPosBounds(std::vector<double>& min, std::vector<double>& max)
+  void setJointsPosBounds(const std::vector<double>& min, const std::vector<double>& max)
   {
     size_t num = joint_bounds_storage_.size();
     if(num != min.size() || num != max.size()){

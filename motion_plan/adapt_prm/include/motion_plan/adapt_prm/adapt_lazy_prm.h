@@ -312,7 +312,13 @@ namespace ompl
              * milestones) */
             double distanceFunction(const Vertex a, const Vertex b) const
             {
-                return si_->distance(stateProperty_[a], stateProperty_[b]);
+                double distance = si_->distance(stateProperty_[a], stateProperty_[b]);
+                // const float u_a(vertexUtilization_[a]);
+                // const float u_b(vertexUtilization_[b]);
+                // distance /= sqrt((u_a + u_b) / 2 + 1);
+                // if (tmpCost_.count(a) || tmpCost_.count(b))
+                //     distance += 9999;
+                return distance;
             }
 
             /** \brief Given two vertices, returns a heuristic on the cost of the path connecting them.
@@ -329,7 +335,10 @@ namespace ompl
 
             void explorationCondition();
 
-            void computeAndSetBounds(const base::PathPtr p);
+            using Bounds = std::map<std::string, std::vector<double>>;
+            void computeBounds(const base::PathPtr p, Bounds& bounds);
+
+            void setBounds(const Bounds& bounds);
             
             void resetBounds();
 
@@ -399,7 +408,7 @@ namespace ompl
             /** \brief The utilization of an vertex */
             boost::property_map<Graph, vertex_utilization_t>::type vertexUtilization_;
 
-            std::map<Vertex, float> tmpCost_;
+            std::set<Vertex> tmpCost_;
 
             /** \brief Access the validity state of an edge */
             boost::property_map<Graph, edge_flags_t>::type edgeValidityProperty_;
