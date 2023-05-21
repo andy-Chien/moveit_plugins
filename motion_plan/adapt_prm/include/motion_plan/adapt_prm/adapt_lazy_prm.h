@@ -408,7 +408,7 @@ namespace ompl
             /** \brief The utilization of an vertex */
             boost::property_map<Graph, vertex_utilization_t>::type vertexUtilization_;
 
-            std::set<Vertex> tmpCost_;
+            std::set<Vertex>* tmpCost_{nullptr};
 
             /** \brief Access the validity state of an edge */
             boost::property_map<Graph, edge_flags_t>::type edgeValidityProperty_;

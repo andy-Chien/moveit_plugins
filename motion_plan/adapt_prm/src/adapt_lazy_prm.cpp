@@ -315,8 +315,9 @@ void ompl::geometric::AdaptLazyPRM::clearQuery()
 {
     startM_.clear();
     goalM_.clear();
-    tmpCost_.clear();
     pis_.restart();
+    if (tmpCost_)
+        tmpCost_->clear();
 }
 
 void ompl::geometric::AdaptLazyPRM::clearValidity()
@@ -432,6 +433,7 @@ ompl::base::PlannerStatus ompl::geometric::AdaptLazyPRM::solve(const base::Plann
     iterations_ = 0;
     Bounds bounds;
     base::PathPtr solution;
+    tmpCost_ = new std::set<Vertex>();
 
     // Grow roadmap in lazy fashion -- add vertices and edges without checking validity
     while (!ptc)
@@ -535,7 +537,7 @@ ompl::base::PlannerStatus ompl::geometric::AdaptLazyPRM::solve(const base::Plann
         pdef_->addSolutionPath(psol);
     }
     removeTerminalPair(startGoalPair);
-    tmpCost_.clear();
+    tmpCost_ = nullptr;
 
     if (enableExploration_)
     {
@@ -680,8 +682,8 @@ ompl::base::PathPtr ompl::geometric::AdaptLazyPRM::constructSolution(const Verte
         if ((vd & VALIDITY_TRUE) == 0)
         {
             solution_validity = false;
-            if (vertexUtilization_[pos] > 0) // used vertex
-                tmpCost_.insert(pos);
+            if (tmpCost_ && vertexUtilization_[pos] > 0 && !tmpCost_->count(pos)) // used vertex
+                tmpCost_->insert(pos);
             else
                 milestonesToRemove.insert(pos); // new sampled vertex
         }
@@ -882,7 +884,7 @@ bool ompl::geometric::AdaptLazyPRM::isAcceptable(ompl::base::Cost cost)
 ompl::base::Cost ompl::geometric::AdaptLazyPRM::costHeuristic(Vertex u, Vertex v) const
 {
     float c = 0;
-    if (tmpCost_.count(u) || tmpCost_.count(v))
+    if (tmpCost_ && (tmpCost_->count(u) || tmpCost_->count(v)))
         c += magic::INVALIDITY_COST;
 
     if (usingUtilizationOpt_ && solvedCount_ > magic::VERTEX_CLEARING_TIMING)
@@ -920,7 +922,7 @@ bool ompl::geometric::AdaptLazyPRM::isAcceptable(ompl::base::Cost cost)
 ompl::base::Cost ompl::geometric::AdaptLazyPRM::costHeuristic(Vertex u, Vertex v) const
 {
     float c = 0;
-    if (tmpCost_.count(u) || tmpCost_.count(v))
+    if (tmpCost_ && (tmpCost_->count(u) || tmpCost_->count(v)))
         c += magic::INVALIDITY_COST;
 
     c += opt_->motionCostHeuristic(stateProperty_[u], stateProperty_[v]).value();
