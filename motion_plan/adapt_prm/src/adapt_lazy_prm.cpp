@@ -85,6 +85,8 @@ namespace ompl
 
         static const short int LOWEST_ATH_UTILIZATION = 25;
 
+        // static const short int USEFUL_UUTILIZATION = 15;
+
         static const short int MAX_VERTICES = 3125;
 
         static const float INVALIDITY_COST = 9765625;
@@ -106,6 +108,7 @@ ompl::geometric::AdaptLazyPRM::AdaptLazyPRM(const base::SpaceInformationPtr &si,
     specs_.approximateSolutions = false;
     specs_.optimizingPaths = true;
     athUtilization_ = magic::LOWEST_ATH_UTILIZATION;
+    // usefulUtilization_ = magic::USEFUL_UUTILIZATION;
 
     Planner::declareParam<double>("range", this, &AdaptLazyPRM::setRange, &AdaptLazyPRM::getRange, "0.:1.:10000.");
     if (!starStrategy_)
@@ -783,7 +786,11 @@ void ompl::geometric::AdaptLazyPRM::updateUtilization()
 {
     if (solutionM_.size() <= 2)
         return;
-    
+    // if (usefulVertex_.size() > magic::MAX_VERTICES / 20)
+    //     usefulUtilization_ += 1;
+    // else if (usefulUtilization_ > magic::USEFUL_UUTILIZATION)
+    //     usefulUtilization_ -= 1;
+
     for (auto it = solutionM_.rbegin() + 1; it != solutionM_.rend() - 1; ++it)
     {
         short int &vertexUtilization = vertexUtilization_[*it];
@@ -792,6 +799,10 @@ void ompl::geometric::AdaptLazyPRM::updateUtilization()
         vertexUtilization = log(vertexUtilization + 1.0) / log(1.1);
         if (vertexUtilization  > athUtilization_)
             athUtilization_ = vertexUtilization ;
+        // if (vertexUtilization  > usefulUtilization_){
+        //     std::cout<<"vertexUtilization  > usefulUtilization_, "<<vertexUtilization<<std::endl;
+        //     usefulVertex_.insert(*it);
+        // }
     }
     if (solutionE_.size() <= 2)
         return;
@@ -826,6 +837,8 @@ void ompl::geometric::AdaptLazyPRM::simplifyGragh(bool regular)
                 milestonesToRemove.insert(*v);
             else if (*vertexUtilization > athUtilization_ && threshold == magic::UTILIZATION_THRESHOLD)
                 athUtilization_ = *vertexUtilization;
+            // else if (*vertexUtilization < usefulUtilization_ && usefulVertex_.count(*v))
+            //     usefulVertex_.erase(*v);
         }
     }
 

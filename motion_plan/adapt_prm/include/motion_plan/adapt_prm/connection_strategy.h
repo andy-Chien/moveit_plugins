@@ -60,6 +60,12 @@ namespace ompl
       {
       }
 
+      // KBoundedWeightStrategy(const unsigned int k, const double bound,
+      //           const std::shared_ptr<NearestNeighbors<Milestone>> &nn, const std::set<Milestone>& um)
+      //   : KStrategy<Milestone>(k, nn), bound_(bound), usefulMilestone_(um)
+      // {
+      // }
+
       const auto &operator()(const Milestone &m)
       {
         auto &result = KStrategy<Milestone>::neighbors_;
@@ -80,12 +86,30 @@ namespace ompl
           --newCount;
         }
         result.resize(newCount);
+
+        // if (!usefulMilestone_.empty())
+        // {
+        //   double nearestDist = std::numeric_limits<double>::max();
+        //   auto nearest_it = usefulMilestone_.begin();
+        //   for (auto it = usefulMilestone_.begin(); it != usefulMilestone_.end(); ++it) 
+        //   {
+        //     const double d = dist(*it, m);
+        //     if (d < nearestDist){
+        //       nearestDist = d;
+        //       nearest_it = it;
+        //     }
+        //   }
+
+        //   if (std::find(result.begin(), result.end(), *nearest_it) == result.end())
+        //     result.push_back(*nearest_it);
+        // }
         return result;
       }
 
     protected:
       /** \brief The maximum distance at which nearby milestones are reported */
       const double bound_;
+      // const std::set<Milestone>& usefulMilestone_;
     };
   }
 }
