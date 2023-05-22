@@ -85,7 +85,7 @@ namespace ompl
 
         static const short int LOWEST_ATH_UTILIZATION = 25;
 
-        // static const short int USEFUL_UUTILIZATION = 15;
+        static const short int USEFUL_UUTILIZATION = 15;
 
         static const short int MAX_VERTICES = 3125;
 
@@ -108,7 +108,8 @@ ompl::geometric::AdaptLazyPRM::AdaptLazyPRM(const base::SpaceInformationPtr &si,
     specs_.approximateSolutions = false;
     specs_.optimizingPaths = true;
     athUtilization_ = magic::LOWEST_ATH_UTILIZATION;
-    // usefulUtilization_ = magic::USEFUL_UUTILIZATION;
+    usefulUtilization_ = magic::USEFUL_UUTILIZATION;
+    usefulVertex_.reserve(magic::MAX_VERTICES / 10);
 
     Planner::declareParam<double>("range", this, &AdaptLazyPRM::setRange, &AdaptLazyPRM::getRange, "0.:1.:10000.");
     if (!starStrategy_)
@@ -286,7 +287,7 @@ void ompl::geometric::AdaptLazyPRM::setMaxNearestNeighbors(unsigned int k)
                                  });
     }
     if (!userSetConnectionStrategy_)
-        connectionStrategy_ = KBoundedWeightStrategy<Vertex>(k, maxDistance_, nn_);
+        connectionStrategy_ = KBoundedWeightStrategy<Vertex>(k, maxDistance_, nn_, usefulVertex_);
     if (isSetup())
         setup();
 }
@@ -305,7 +306,7 @@ void ompl::geometric::AdaptLazyPRM::setDefaultConnectionStrategy()
     if (starStrategy_)
         connectionStrategy_ = KStarStrategy<Vertex>([this] { return milestoneCount(); }, nn_, si_->getStateDimension());
     else
-        connectionStrategy_ = KBoundedWeightStrategy<Vertex>(magic::DEFAULT_NEAREST_NEIGHBORS_LAZY, maxDistance_, nn_);
+        connectionStrategy_ = KBoundedWeightStrategy<Vertex>(magic::DEFAULT_NEAREST_NEIGHBORS_LAZY, maxDistance_, nn_, usefulVertex_);
 }
 
 void ompl::geometric::AdaptLazyPRM::setProblemDefinition(const base::ProblemDefinitionPtr &pdef)
@@ -447,24 +448,23 @@ ompl::base::PlannerStatus ompl::geometric::AdaptLazyPRM::solve(const base::Plann
             if (++iterations_ > magic::MAX_VERTICES)
                 break;
             if (bestSolution && boundsComputed < 1){
-                boundsComputed += 1;
+                boundsComputed += 2;
                 boundsSample = true;
                 computeBounds(bestSolution, bounds);
                 setBounds(bounds);
             }
-
-            // else if (solution && !boundsComputed){
-            //     boundsComputed += 1;
-            //     boundsSample = true;
-            //     computeBounds(solution, bounds);
-            // }
-            // if (boundsSample){
-            //     boundsSample = false;
-            //     setBounds(bounds);
-            // }else{
-            //     boundsSample = boundsComputed;
-            //     resetBounds();
-            // }
+            else if (solution && !boundsComputed){
+                boundsComputed += 1;
+                boundsSample = true;
+                computeBounds(solution, bounds);
+            }
+            if (boundsSample){
+                boundsSample = false;
+                setBounds(bounds);
+            }else{
+                boundsSample = boundsComputed;
+                resetBounds();
+            }
             sampler_->sampleUniform(workState);
             Vertex addedVertex = addMilestone(si_->cloneState(workState));
             new_vertex_component = (long int)vertexComponentProperty_[addedVertex];
@@ -786,10 +786,10 @@ void ompl::geometric::AdaptLazyPRM::updateUtilization()
 {
     if (solutionM_.size() <= 2)
         return;
-    // if (usefulVertex_.size() > magic::MAX_VERTICES / 20)
-    //     usefulUtilization_ += 1;
-    // else if (usefulUtilization_ > magic::USEFUL_UUTILIZATION)
-    //     usefulUtilization_ -= 1;
+    if (usefulVertex_.size() > magic::MAX_VERTICES / 20)
+        usefulUtilization_ += 1;
+    else if (usefulUtilization_ > magic::USEFUL_UUTILIZATION)
+        usefulUtilization_ -= 1;
 
     for (auto it = solutionM_.rbegin() + 1; it != solutionM_.rend() - 1; ++it)
     {
@@ -799,10 +799,10 @@ void ompl::geometric::AdaptLazyPRM::updateUtilization()
         vertexUtilization = log(vertexUtilization + 1.0) / log(1.1);
         if (vertexUtilization  > athUtilization_)
             athUtilization_ = vertexUtilization ;
-        // if (vertexUtilization  > usefulUtilization_){
-        //     std::cout<<"vertexUtilization  > usefulUtilization_, "<<vertexUtilization<<std::endl;
-        //     usefulVertex_.insert(*it);
-        // }
+        if (vertexUtilization > usefulUtilization_ && 
+                std::find(usefulVertex_.begin(), usefulVertex_.end(), *it) == usefulVertex_.end()){
+            usefulVertex_.push_back(*it);
+        }
     }
     if (solutionE_.size() <= 2)
         return;
@@ -837,10 +837,21 @@ void ompl::geometric::AdaptLazyPRM::simplifyGragh(bool regular)
                 milestonesToRemove.insert(*v);
             else if (*vertexUtilization > athUtilization_ && threshold == magic::UTILIZATION_THRESHOLD)
                 athUtilization_ = *vertexUtilization;
-            // else if (*vertexUtilization < usefulUtilization_ && usefulVertex_.count(*v))
-            //     usefulVertex_.erase(*v);
         }
     }
+    std::sort(usefulVertex_.begin(), usefulVertex_.end(), 
+        [this](const Vertex& a, const Vertex& b) -> bool {
+            return vertexUtilization_[a] > vertexUtilization_[b];
+        }
+    );
+    short int num_to_pop = 0;
+    for (auto it=usefulVertex_.rbegin(); it!=usefulVertex_.rend(); it++){
+        if (vertexUtilization_[*it] > usefulUtilization_)
+            break;
+        num_to_pop++;
+    }
+    if (num_to_pop > 0)
+        usefulVertex_.resize(usefulVertex_.size() - num_to_pop);
 
     if (!milestonesToRemove.empty())
     {

@@ -410,7 +410,7 @@ namespace ompl
 
             std::set<Vertex>* tmpCost_{nullptr};
 
-            // std::set<Vertex> usefulVertex_;
+            std::vector<Vertex> usefulVertex_;
 
             /** \brief Access the validity state of an edge */
             boost::property_map<Graph, edge_flags_t>::type edgeValidityProperty_;
@@ -436,7 +436,7 @@ namespace ompl
             unsigned short int solvedCount_{0};
 
             short int athUtilization_{0};
-            // short int usefulUtilization_{0};
+            short int usefulUtilization_{0};
 
             /** \brief Mutex to guard access to the Graph member (g_) */
             mutable std::mutex graphMutex_;
