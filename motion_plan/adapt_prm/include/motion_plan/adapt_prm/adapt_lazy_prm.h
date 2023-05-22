@@ -366,8 +366,11 @@ namespace ompl
             /** \brief The maximum length of a motion to be added to a tree */
             double maxDistance_{0.};
 
+            /** \brief Sampler user for generating valid samples in the state space */
+            base::ValidStateSamplerPtr validSampler_;
+
             /** \brief Sampler user for generating random in the state space */
-            base::StateSamplerPtr sampler_;
+            base::StateSamplerPtr simpleSampler_;
 
             /** \brief Nearest neighbors data structure */
             RoadmapNeighbors nn_;

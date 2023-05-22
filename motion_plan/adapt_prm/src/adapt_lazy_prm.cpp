@@ -234,7 +234,8 @@ void ompl::geometric::AdaptLazyPRM::setup()
         setup_ = false;
     }
 
-    sampler_ = si_->allocStateSampler();
+    validSampler_ = si_->allocValidStateSampler();
+    simpleSampler_ = si_->allocStateSampler();
 }
 
 void ompl::geometric::AdaptLazyPRM::resetComponent()
@@ -465,7 +466,7 @@ ompl::base::PlannerStatus ompl::geometric::AdaptLazyPRM::solve(const base::Plann
                 boundsSample = boundsComputed;
                 resetBounds();
             }
-            sampler_->sampleUniform(workState);
+            simpleSampler_->sampleUniform(workState);
             Vertex addedVertex = addMilestone(si_->cloneState(workState));
             new_vertex_component = (long int)vertexComponentProperty_[addedVertex];
         }
@@ -475,7 +476,7 @@ ompl::base::PlannerStatus ompl::geometric::AdaptLazyPRM::solve(const base::Plann
         // if(solComponent == -1 || someSolutionFound)
         // {
         //     ++iterations_;
-        //     sampler_->sampleUniform(workState);
+        //     simpleSampler_->sampleUniform(workState);
         //     Vertex addedVertex = addMilestone(si_->cloneState(workState));
         //     new_vertex_component = (long int)vertexComponentProperty_[addedVertex] == solComponent;
         // }
