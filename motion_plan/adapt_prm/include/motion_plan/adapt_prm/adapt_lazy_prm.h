@@ -313,11 +313,6 @@ namespace ompl
             double distanceFunction(const Vertex a, const Vertex b) const
             {
                 double distance = si_->distance(stateProperty_[a], stateProperty_[b]);
-                // const float u_a(vertexUtilization_[a]);
-                // const float u_b(vertexUtilization_[b]);
-                // distance /= sqrt((u_a + u_b) / 2 + 1);
-                // if (tmpCost_.count(a) || tmpCost_.count(b))
-                //     distance += 9999;
                 return distance;
             }
 
@@ -412,6 +407,8 @@ namespace ompl
             boost::property_map<Graph, vertex_utilization_t>::type vertexUtilization_;
 
             std::set<Vertex>* tmpCost_{nullptr};
+
+            std::set<Edge>* tmpWeight_{nullptr};
 
             std::vector<Vertex> usefulVertex_;
 

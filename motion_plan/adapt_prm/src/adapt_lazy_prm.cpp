@@ -323,6 +323,8 @@ void ompl::geometric::AdaptLazyPRM::clearQuery()
     pis_.restart();
     if (tmpCost_)
         tmpCost_->clear();
+    if (tmpWeight_)
+        tmpWeight_->clear();
 }
 
 void ompl::geometric::AdaptLazyPRM::clearValidity()
@@ -439,6 +441,7 @@ ompl::base::PlannerStatus ompl::geometric::AdaptLazyPRM::solve(const base::Plann
     Bounds bounds;
     base::PathPtr solution;
     tmpCost_ = new std::set<Vertex>();
+    tmpWeight_ = new std::set<Edge>();
 
     // Grow roadmap in lazy fashion -- add vertices and edges without checking validity
     while (!ptc)
@@ -541,7 +544,13 @@ ompl::base::PlannerStatus ompl::geometric::AdaptLazyPRM::solve(const base::Plann
         pdef_->addSolutionPath(psol);
     }
     removeTerminalPair(startGoalPair);
+
+    for (const auto& e : *tmpWeight_){
+        weightProperty_[e] = opt_->identityCost();
+    }
+
     tmpCost_ = nullptr;
+    tmpWeight_ = nullptr;
 
     if (enableExploration_)
     {
@@ -752,10 +761,12 @@ ompl::base::PathPtr ompl::geometric::AdaptLazyPRM::constructSolution(const Verte
         }
         if ((evd & VALIDITY_TRUE) == 0)
         {
-            // if (edgeUtilization_[e] > 0) //used edge
-            //     weightProperty_[e] = ompl::base::Cost(magic::INVALIDITY_COST);
-            // else
-            if (edgeUtilization_[e] <= 0)
+            if (tmpWeight_ && edgeUtilization_[e] > 0 && !tmpWeight_->count(e)) //used edge
+            {
+                tmpWeight_->insert(e);
+                weightProperty_[e] = opt_->infiniteCost();
+            }
+            else
             {
                 boost::remove_edge(e, g_);
                 unsigned long int newComponent = componentCount_++;
