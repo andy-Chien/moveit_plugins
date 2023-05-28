@@ -263,7 +263,9 @@ namespace ompl
             static const unsigned int VALIDITY_UNKNOWN = 0;
 
             /** \brief Flag indicating validity of an edge of a vertex */
-            static const unsigned int VALIDITY_TRUE = 1;
+            static const unsigned int VALIDITY_KNOWN = 1;
+
+            static const unsigned int VALIDITY_TRUE = 2;
 
             ///////////////////////////////////////
             // Planner progress property functions
@@ -382,11 +384,17 @@ namespace ompl
             /** \brief Array of goal milestones */
             std::vector<Vertex> goalM_;
 
-            /** \brief Array of solution milestones */
-            std::vector<Vertex> solutionM_;
+            /** \brief Set of solution milestones */
+            std::shared_ptr<std::set<Vertex>> solutionM_;
 
-            /** \brief Array of best solution edgies */
-            std::vector<Edge> solutionE_;
+            /** \brief Set of best solution edgies */
+            std::shared_ptr<std::set<Edge>> solutionE_;
+
+            /** \brief Set of solution milestones */
+            std::shared_ptr<std::set<Vertex>> bestSolutionM_;
+
+            /** \brief Set of best solution edgies */
+            std::shared_ptr<std::set<Edge>> bestSolutionE_;
 
             /** \brief Access to the internal base::state at each Vertex */
             boost::property_map<Graph, boost::vertex_index_t>::type indexProperty_;
@@ -406,9 +414,9 @@ namespace ompl
             /** \brief The utilization of an vertex */
             boost::property_map<Graph, vertex_utilization_t>::type vertexUtilization_;
 
-            std::set<Vertex>* tmpCost_{nullptr};
+            // std::set<Vertex>* tmpCost_{nullptr};
 
-            std::set<Edge>* tmpWeight_{nullptr};
+            std::set<std::pair<Edge, double>>* tmpWeight_{nullptr};
 
             std::vector<Vertex> usefulVertex_;
 

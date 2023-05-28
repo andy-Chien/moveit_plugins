@@ -79,7 +79,7 @@ namespace ompl
 
         static const unsigned int MAX_SOLUTIONS_FOR_LAZY_OPTIMIZATION = 50;
 
-        static const unsigned int VERTEX_CLEARING_TIMING = 25;
+        static const unsigned int VERTEX_CLEARING_TIMING = 1;
 
         static const short int UTILIZATION_THRESHOLD = -5;
 
@@ -88,8 +88,6 @@ namespace ompl
         static const short int USEFUL_UUTILIZATION = 15;
 
         static const short int MAX_VERTICES = 3125;
-
-        static const float INVALIDITY_COST = 9765625;
     }
 }
 
@@ -110,6 +108,7 @@ ompl::geometric::AdaptLazyPRM::AdaptLazyPRM(const base::SpaceInformationPtr &si,
     athUtilization_ = magic::LOWEST_ATH_UTILIZATION;
     usefulUtilization_ = magic::USEFUL_UUTILIZATION;
     usefulVertex_.reserve(magic::MAX_VERTICES / 10);
+    tmpWeight_ = new std::set<std::pair<Edge, double>>();
 
     Planner::declareParam<double>("range", this, &AdaptLazyPRM::setRange, &AdaptLazyPRM::getRange, "0.:1.:10000.");
     if (!starStrategy_)
@@ -184,7 +183,11 @@ ompl::geometric::AdaptLazyPRM::AdaptLazyPRM(const base::PlannerData &data, bool 
     }
 }
 
-ompl::geometric::AdaptLazyPRM::~AdaptLazyPRM() = default;
+ompl::geometric::AdaptLazyPRM::~AdaptLazyPRM()
+{
+    delete simplifyGrapgThread_;
+    delete tmpWeight_;
+};
 
 void ompl::geometric::AdaptLazyPRM::setup()
 {
@@ -287,8 +290,14 @@ void ompl::geometric::AdaptLazyPRM::setMaxNearestNeighbors(unsigned int k)
                                      return distanceFunction(a, b);
                                  });
     }
-    if (!userSetConnectionStrategy_)
-        connectionStrategy_ = KBoundedWeightStrategy<Vertex>(k, maxDistance_, nn_, usefulVertex_);
+    if (!userSetConnectionStrategy_){
+        connectionStrategy_ = KBoundedWeightStrategy<Vertex>(k, maxDistance_, nn_, usefulVertex_, 
+            [this](Vertex v) -> bool {
+                const auto& vd = vertexValidityProperty_[v];
+                return !vd || (vd & VALIDITY_TRUE);
+            }
+        );
+    }
     if (isSetup())
         setup();
 }
@@ -304,10 +313,17 @@ void ompl::geometric::AdaptLazyPRM::setDefaultConnectionStrategy()
                                  });
     }
 
-    if (starStrategy_)
+    if (starStrategy_){
         connectionStrategy_ = KStarStrategy<Vertex>([this] { return milestoneCount(); }, nn_, si_->getStateDimension());
-    else
-        connectionStrategy_ = KBoundedWeightStrategy<Vertex>(magic::DEFAULT_NEAREST_NEIGHBORS_LAZY, maxDistance_, nn_, usefulVertex_);
+    }else{
+        connectionStrategy_ = KBoundedWeightStrategy<Vertex>(
+            magic::DEFAULT_NEAREST_NEIGHBORS_LAZY, maxDistance_, nn_, usefulVertex_, 
+            [this](Vertex v) -> bool {
+                const auto& vd = vertexValidityProperty_[v];
+                return !vd || (vd & VALIDITY_TRUE);
+            }
+        );
+    }
 }
 
 void ompl::geometric::AdaptLazyPRM::setProblemDefinition(const base::ProblemDefinitionPtr &pdef)
@@ -321,8 +337,6 @@ void ompl::geometric::AdaptLazyPRM::clearQuery()
     startM_.clear();
     goalM_.clear();
     pis_.restart();
-    if (tmpCost_)
-        tmpCost_->clear();
     if (tmpWeight_)
         tmpWeight_->clear();
 }
@@ -371,7 +385,7 @@ ompl::geometric::AdaptLazyPRM::Vertex ompl::geometric::AdaptLazyPRM::addMileston
     foreach (Vertex n, neighbors)
         if (connectionFilter_(m, n))
         {
-            const base::Cost weight = costHeuristic(m, n);
+            const base::Cost weight = opt_->motionCost(stateProperty_[m], stateProperty_[n]);
             const Graph::edge_property_type properties(weight);
             const Edge &e = boost::add_edge(m, n, properties, g_).first;
             edgeValidityProperty_[e] = VALIDITY_UNKNOWN;
@@ -440,8 +454,8 @@ ompl::base::PlannerStatus ompl::geometric::AdaptLazyPRM::solve(const base::Plann
     iterations_ = 0;
     Bounds bounds;
     base::PathPtr solution;
-    tmpCost_ = new std::set<Vertex>();
-    tmpWeight_ = new std::set<Edge>();
+    if (tmpWeight_)
+        tmpWeight_->clear();
 
     // Grow roadmap in lazy fashion -- add vertices and edges without checking validity
     while (!ptc)
@@ -518,12 +532,16 @@ ompl::base::PlannerStatus ompl::geometric::AdaptLazyPRM::solve(const base::Plann
                 {
                     fullyOptimized = true;
                     bestSolution = solution;
+                    bestSolutionM_ = solutionM_;
+                    bestSolutionE_ = solutionE_;
                     bestCost_ = c;
                     break;
                 }
                 if (opt_->isCostBetterThan(c, bestCost_))
                 {
                     bestSolution = solution;
+                    bestSolutionM_ = solutionM_;
+                    bestSolutionE_ = solutionE_;
                     bestCost_ = c;
                 }
                 else if (++optimizingSolutions > magic::MAX_SOLUTIONS_FOR_LAZY_OPTIMIZATION && this->isAcceptable(bestCost_))
@@ -545,12 +563,9 @@ ompl::base::PlannerStatus ompl::geometric::AdaptLazyPRM::solve(const base::Plann
     }
     removeTerminalPair(startGoalPair);
 
-    for (const auto& e : *tmpWeight_){
-        weightProperty_[e] = opt_->identityCost();
+    for (const auto& ew : *tmpWeight_){
+        weightProperty_[ew.first] = base::Cost(ew.second);
     }
-
-    tmpCost_ = nullptr;
-    tmpWeight_ = nullptr;
 
     if (enableExploration_)
     {
@@ -640,8 +655,8 @@ ompl::base::PathPtr ompl::geometric::AdaptLazyPRM::constructSolution(const Verte
     // Need to update the index map here, becuse nodes may have been removed and
     // the numbering will not be 0 .. N-1 otherwise.
     unsigned long int index = 0;
-    solutionM_.clear();
-    solutionE_.clear();
+    solutionM_ = std::make_shared<std::set<Vertex>>();
+    solutionE_ = std::make_shared<std::set<Edge>>();
     boost::graph_traits<Graph>::vertex_iterator vi, vend;
     for (boost::tie(vi, vend) = boost::vertices(g_); vi != vend; ++vi, ++index)
         indexProperty_[*vi] = index;
@@ -689,16 +704,21 @@ ompl::base::PathPtr ompl::geometric::AdaptLazyPRM::constructSolution(const Verte
     {
         const base::State *st = stateProperty_[pos];
         unsigned int &vd = vertexValidityProperty_[pos];
-        if ((vd & VALIDITY_TRUE) == 0)
+        if (vertexUtilization_[pos] > 0){
+        }
+        if (!vd){
             if (si_->isValid(st))
-                vd |= VALIDITY_TRUE;
-        if ((vd & VALIDITY_TRUE) == 0)
+                vd |= (VALIDITY_TRUE | VALIDITY_KNOWN);
+            else
+                vd |= VALIDITY_KNOWN;
+        }
+        if (!(vd & VALIDITY_TRUE))
         {
             solution_validity = false;
-            if (tmpCost_ && vertexUtilization_[pos] > 0 && !tmpCost_->count(pos)) // used vertex
-                tmpCost_->insert(pos);
-            else
+            if (vertexUtilization_[pos] <= 0)
                 milestonesToRemove.insert(pos); // new sampled vertex
+            else{
+            }
         }
         if (solution_validity)
             states.push_back(st);
@@ -750,21 +770,25 @@ ompl::base::PathPtr ompl::geometric::AdaptLazyPRM::constructSolution(const Verte
     // Check the edges too, if the vertices were valid. Remove the first invalid edge only.
     std::vector<const base::State *>::const_iterator prevState = states.begin(), state = prevState + 1;
     Vertex prevVertex = goal, pos = prev[goal];
+    bool is_first = true;
     do
     {
         Edge e = boost::lookup_edge(pos, prevVertex, g_).first;
         unsigned int &evd = edgeValidityProperty_[e];
-        if ((evd & VALIDITY_TRUE) == 0)
+        if (!evd)
         {
             if (si_->checkMotion(*state, *prevState))
-                evd |= VALIDITY_TRUE;
+                evd |= (VALIDITY_TRUE | VALIDITY_KNOWN);
+            else
+                evd |= VALIDITY_KNOWN;
         }
-        if ((evd & VALIDITY_TRUE) == 0)
+        if (!(evd & VALIDITY_TRUE))
         {
-            if (tmpWeight_ && edgeUtilization_[e] > 0 && !tmpWeight_->count(e)) //used edge
+            if (tmpWeight_ && edgeUtilization_[e] > 0) //used edge
             {
-                tmpWeight_->insert(e);
-                weightProperty_[e] = opt_->infiniteCost();
+                auto& wp = weightProperty_[e];
+                tmpWeight_->insert(std::pair<Edge, double>(e, wp.value()));
+                wp = opt_->infiniteCost();
             }
             else
             {
@@ -775,11 +799,13 @@ ompl::base::PathPtr ompl::geometric::AdaptLazyPRM::constructSolution(const Verte
             }
             solution_validity = false;
         }
-        else
+        else if (solution_validity && pos != start)
         {
-            solutionM_.push_back(pos);
-            solutionE_.push_back(e);
+            solutionM_->insert(pos);
+            if (!is_first)
+                solutionE_->insert(e);
         }
+        is_first = false;
         prevState = state;
         ++state;
         prevVertex = pos;
@@ -796,31 +822,28 @@ ompl::base::PathPtr ompl::geometric::AdaptLazyPRM::constructSolution(const Verte
 
 void ompl::geometric::AdaptLazyPRM::updateUtilization()
 {
-    if (solutionM_.size() <= 2)
-        return;
     if (usefulVertex_.size() > magic::MAX_VERTICES / 20)
         usefulUtilization_ += 1;
     else if (usefulUtilization_ > magic::USEFUL_UUTILIZATION)
         usefulUtilization_ -= 1;
 
-    for (auto it = solutionM_.rbegin() + 1; it != solutionM_.rend() - 1; ++it)
+    for (const auto& v : *bestSolutionM_)
     {
-        short int &vertexUtilization = vertexUtilization_[*it];
+        short int &vertexUtilization = vertexUtilization_[v];
         if (vertexUtilization < 1)
             vertexUtilization = 1;
         vertexUtilization = log(vertexUtilization + 1.0) / log(1.1);
         if (vertexUtilization  > athUtilization_)
             athUtilization_ = vertexUtilization ;
         if (vertexUtilization > usefulUtilization_ && 
-                std::find(usefulVertex_.begin(), usefulVertex_.end(), *it) == usefulVertex_.end()){
-            usefulVertex_.push_back(*it);
+                std::find(usefulVertex_.begin(), usefulVertex_.end(), v) == usefulVertex_.end()){
+            usefulVertex_.push_back(v);
         }
     }
-    if (solutionE_.size() <= 2)
-        return;
-    for (auto it = solutionE_.begin() + 1; it != solutionE_.end() - 1; ++it)
+
+    for (const auto& e : *bestSolutionE_)
     {
-        short int &edgeUtilization = edgeUtilization_[*it];
+        short int &edgeUtilization = edgeUtilization_[e];
         if (edgeUtilization < 1)
             edgeUtilization = 1;
         edgeUtilization = log(edgeUtilization + 1.0) / log(1.1);
@@ -900,7 +923,7 @@ void ompl::geometric::AdaptLazyPRM::simplifyGragh(bool regular)
             boost::remove_edge(*e--, g_);
         }
     }
-    
+
     resetComponent();
     OMPL_WARN("%s: Graph has %u states after simplify with threshold %d", getName().c_str(), boost::num_vertices(g_), threshold);
 }
@@ -919,21 +942,22 @@ bool ompl::geometric::AdaptLazyPRM::isAcceptable(ompl::base::Cost cost)
 
 ompl::base::Cost ompl::geometric::AdaptLazyPRM::costHeuristic(Vertex u, Vertex v) const
 {
-    float c = 0;
-    if (tmpCost_ && (tmpCost_->count(u) || tmpCost_->count(v)))
-        c += magic::INVALIDITY_COST;
+    const auto &vd = vertexValidityProperty_[u];
+    if (vd && !(vd & VALIDITY_TRUE)){
+        return opt_->infiniteCost();
+    }
 
-    if (usingUtilizationOpt_ && solvedCount_ > magic::VERTEX_CLEARING_TIMING)
+    if (usingUtilizationOpt_)
     {
-        float uti1 = float(vertexUtilization_[u]) / float(athUtilization_);
-        float uti2 = float(vertexUtilization_[u]) / float(athUtilization_);
-        c += std::static_pointer_cast<base::PathLengthUtilizationOptimizationObjective>(opt_)
-            ->motionCostHeuristic(stateProperty_[u], stateProperty_[v], uti1, uti2).value();
-        return ompl::base::Cost(c);
+        const float uti1 = float(vertexUtilization_[u]) / float(athUtilization_);
+        const float uti2 = 0;
+        const auto c = std::static_pointer_cast<base::PathLengthUtilizationOptimizationObjective>(opt_)
+            ->motionCostHeuristic(stateProperty_[u], stateProperty_[v], uti1, uti2);
+        return c;
     }
     else
     {
-        c += opt_->motionCostHeuristic(stateProperty_[u], stateProperty_[v]).value();
+        const float c = opt_->motionCostHeuristic(stateProperty_[u], stateProperty_[v]).value();
         return ompl::base::Cost(c);
     }
 }
@@ -957,11 +981,11 @@ bool ompl::geometric::AdaptLazyPRM::isAcceptable(ompl::base::Cost cost)
 
 ompl::base::Cost ompl::geometric::AdaptLazyPRM::costHeuristic(Vertex u, Vertex v) const
 {
-    float c = 0;
-    if (tmpCost_ && (tmpCost_->count(u) || tmpCost_->count(v)))
-        c += magic::INVALIDITY_COST;
+    const auto &vd = vertexValidityProperty_[u];
+    if (vd && !(vd & VALIDITY_TRUE))
+        return opt_->infiniteCost();
 
-    c += opt_->motionCostHeuristic(stateProperty_[u], stateProperty_[v]).value();
+    const float c = opt_->motionCostHeuristic(stateProperty_[u], stateProperty_[v]).value();
     return ompl::base::Cost(c);
 }
 

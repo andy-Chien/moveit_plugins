@@ -26,3 +26,4 @@ compute_traj_length:
   ros__parameters:
     robot_names:
       - robot_1
+      - robot_2
