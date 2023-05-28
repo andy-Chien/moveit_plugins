@@ -34,8 +34,7 @@
 
 /* Author: Ioan Sucan, Jeroen De Maeyer */
 
-#include <moveit/ompl_interface/detail/state_validity_checker.h>
-// #include <moveit/ompl_interface/model_based_planning_context.h>
+#include "motion_plan/ompl_interface/detail/state_validity_checker.h"
 #include "motion_plan/ompl_interface/model_based_planning_context.h"
 #include <ompl/base/spaces/constraint/ConstrainedStateSpace.h>
 #include <rclcpp/logger.hpp>
@@ -78,7 +77,8 @@ bool StateValidityChecker::isValid(const ompl::base::State* state, bool verbose)
 {
   assert(state != nullptr);
   // Use cached validity if it is available
-  if (state->as<ModelBasedStateSpace::StateType>()->isValidityKnown())
+  if (/*state->as<ModelBasedStateSpace::StateType>()->isInputState() &&*/
+      state->as<ModelBasedStateSpace::StateType>()->isValidityKnown())
   {
     return state->as<ModelBasedStateSpace::StateType>()->isMarkedValid();
   }
@@ -130,7 +130,8 @@ bool StateValidityChecker::isValid(const ompl::base::State* state, double& dist,
 {
   assert(state != nullptr);
   // Use cached validity and distance if they are available
-  if (state->as<ModelBasedStateSpace::StateType>()->isValidityKnown() &&
+  if (/*state->as<ModelBasedStateSpace::StateType>()->isInputState() &&*/
+      state->as<ModelBasedStateSpace::StateType>()->isValidityKnown() &&
       state->as<ModelBasedStateSpace::StateType>()->isGoalDistanceKnown())
   {
     dist = state->as<ModelBasedStateSpace::StateType>()->distance;
@@ -219,7 +220,8 @@ bool ConstrainedPlanningStateValidityChecker::isValid(const ompl::base::State* w
   auto state = wrapped_state->as<ompl::base::ConstrainedStateSpace::StateType>()->getState();
 
   // Use cached validity if it is available
-  if (state->as<ModelBasedStateSpace::StateType>()->isValidityKnown())
+  if (/*state->as<ModelBasedStateSpace::StateType>()->isInputState() &&*/
+      state->as<ModelBasedStateSpace::StateType>()->isValidityKnown())
   {
     return state->as<ModelBasedStateSpace::StateType>()->isMarkedValid();
   }
@@ -274,7 +276,8 @@ bool ConstrainedPlanningStateValidityChecker::isValid(const ompl::base::State* w
   auto state = wrapped_state->as<ompl::base::ConstrainedStateSpace::StateType>()->getState();
 
   // Use cached validity and distance if they are available
-  if (state->as<ModelBasedStateSpace::StateType>()->isValidityKnown() &&
+  if (/*state->as<ModelBasedStateSpace::StateType>()->isInputState() &&*/
+      state->as<ModelBasedStateSpace::StateType>()->isValidityKnown() &&
       state->as<ModelBasedStateSpace::StateType>()->isGoalDistanceKnown())
   {
     dist = state->as<ModelBasedStateSpace::StateType>()->distance;
