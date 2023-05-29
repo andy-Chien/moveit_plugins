@@ -1,4 +1,5 @@
 add_library(${PROJECT_NAME}_planner SHARED
+  src/lazy_prm.cpp
   src/adapt_prm.cpp
   src/adapt_lazy_prm.cpp
 )

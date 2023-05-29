@@ -70,8 +70,8 @@
 #include "motion_plan/objectives/PathLengthUtilizationOptimizationObjective.h"
 #include "motion_plan/adapt_prm/adapt_prm.h"
 #include "motion_plan/adapt_prm/adapt_lazy_prm.h"
+#include "motion_plan/adapt_prm/lazy_prm.h"
 // ---------------------------------------------------------------
-#include <ompl/geometric/planners/prm/LazyPRM.h>
 
 namespace ompl_interface
 {
@@ -705,7 +705,7 @@ void ompl_interface::ModelBasedPlanningContext::clear()
     }
     else
     {
-      auto planner = dynamic_cast<ompl::geometric::LazyPRM*>(ompl_simple_setup_->getPlanner().get());
+      auto planner = dynamic_cast<ompl::geometric::LazyPRMTmp*>(ompl_simple_setup_->getPlanner().get());
       if (planner != nullptr){
         planner->clearValidity();
       }

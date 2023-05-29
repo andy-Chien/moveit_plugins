@@ -63,7 +63,6 @@
 #include <ompl/geometric/planners/rrt/LBTRRT.h>
 #include <ompl/geometric/planners/est/BiEST.h>
 #include <ompl/geometric/planners/est/ProjEST.h>
-#include <ompl/geometric/planners/prm/LazyPRM.h>
 #include <ompl/geometric/planners/prm/LazyPRMstar.h>
 #include <ompl/geometric/planners/prm/SPARS.h>
 #include <ompl/geometric/planners/prm/SPARStwo.h>
@@ -80,6 +79,7 @@
 
 
 // Andy Chien ----------------------------------------------------
+#include "motion_plan/adapt_prm/lazy_prm.h"
 #include "motion_plan/adapt_prm/adapt_prm.h"
 #include "motion_plan/adapt_prm/adapt_lazy_prm.h"
 #include "motion_plan/ompl_interface/parameterization/joint_space/joint_model_state_space_factory.h"
@@ -246,9 +246,9 @@ MultiQueryPlannerAllocator::allocatePersistentPlanner<ompl::geometric::PRMstar>(
 };
 template <>
 inline ompl::base::Planner*
-MultiQueryPlannerAllocator::allocatePersistentPlanner<ompl::geometric::LazyPRM>(const ob::PlannerData& data)
+MultiQueryPlannerAllocator::allocatePersistentPlanner<ompl::geometric::LazyPRMTmp>(const ob::PlannerData& data)
 {
-  return new og::LazyPRM(data);
+  return new og::LazyPRMTmp(data);
 };
 template <>
 inline ompl::base::Planner*
@@ -322,7 +322,7 @@ void PlanningContextManager::registerDefaultPlanners()
   registerPlannerAllocatorHelper<og::EST>("geometric::EST");
   registerPlannerAllocatorHelper<og::FMT>("geometric::FMT");
   registerPlannerAllocatorHelper<og::KPIECE1>("geometric::KPIECE");
-  registerPlannerAllocatorHelper<og::LazyPRM>("geometric::LazyPRM");
+  registerPlannerAllocatorHelper<og::LazyPRMTmp>("geometric::LazyPRMTmp");
   registerPlannerAllocatorHelper<og::LazyPRMstar>("geometric::LazyPRMstar");
   registerPlannerAllocatorHelper<og::LazyRRT>("geometric::LazyRRT");
   registerPlannerAllocatorHelper<og::LBKPIECE1>("geometric::LBKPIECE");
