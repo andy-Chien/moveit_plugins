@@ -93,7 +93,7 @@ namespace ompl
 
         private:
             float distance_weight_{0.9};
-            float max_cost_{2};
+            float max_cost_{10};
             bool enable_exploration_{true};
         };
     }

@@ -243,8 +243,8 @@ public:
     }
     for(size_t i=0; i<num; i++)
     {
-      joint_bounds_storage_[i][0].min_position_ = min[i];
-      joint_bounds_storage_[i][0].max_position_ = max[i];
+      joint_bounds_storage_[i][0].min_position_ = std::max(min[i], joint_bounds_backup_[i][0].min_position_);
+      joint_bounds_storage_[i][0].max_position_ = std::min(max[i], joint_bounds_backup_[i][0].max_position_);
     }
   }
 

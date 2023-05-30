@@ -296,9 +296,9 @@ namespace ompl
 
             void resetComponent();
 
-            void uniteComponents(Vertex a, Vertex b);
+            void uniteComponents(Vertex a, Vertex b,  bool checkValid=false);
 
-            void markComponent(Vertex v, unsigned long int newComponent);
+            void markComponent(Vertex v, unsigned long int newComponent, bool checkValid=true);
 
             void createDefaultOpt();
 
@@ -330,7 +330,7 @@ namespace ompl
 
             bool isAcceptable(ompl::base::Cost cost);
 
-            void explorationCondition();
+            bool explorationCondition();
 
             using Bounds = std::map<std::string, std::vector<double>>;
             void computeBounds(const base::PathPtr p, Bounds& bounds);
@@ -449,7 +449,7 @@ namespace ompl
             /** \brief Mutex to guard access to the Graph member (g_) */
             mutable std::mutex graphMutex_;
 
-            std::thread* simplifyGrapgThread_;
+            std::thread* simplifyGrapgThread_{nullptr};
 
 
         };
