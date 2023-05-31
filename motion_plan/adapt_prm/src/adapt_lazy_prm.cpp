@@ -244,6 +244,7 @@ void ompl::geometric::AdaptLazyPRM::setup()
     }
 
     validSampler_ = si_->allocValidStateSampler();
+    validSampler_->setNrAttempts(1);
     simpleSampler_ = si_->allocStateSampler();
 }
 
@@ -455,6 +456,7 @@ ompl::base::PlannerStatus ompl::geometric::AdaptLazyPRM::solve(const base::Plann
     bool someSolutionFound = false;
     bool fullyOptimized = false;
     bool boundsSample = false;
+    size_t sample_near_collision = 0;
     uint8_t boundsComputed = 0;
     unsigned int optimizingComponentSegments = 0;
     unsigned int optimizingSolutions = 0;
@@ -484,7 +486,19 @@ ompl::base::PlannerStatus ompl::geometric::AdaptLazyPRM::solve(const base::Plann
                 boundsSample = true;
                 computeBounds(solution, bounds);
             }
-            simpleSampler_->sampleUniform(workState);
+            
+            if (++sample_near_collision % 3 == 0 && !collision_state_.empty()){
+                const auto r = std::rand() % collision_state_.size();
+                auto it = collision_state_.begin();
+                std::advance(it, r);
+                if (!validSampler_->sampleNear(workState, *it, 3.0))
+                    simpleSampler_->sampleUniform(workState);
+                si_->freeState(*it);
+                collision_state_.erase(*it);
+            }else{
+                simpleSampler_->sampleUniform(workState);
+            }
+
             Vertex addedVertex = addMilestone(si_->cloneState(workState));
             new_vertex_component = (long int)vertexComponentProperty_[addedVertex];
         }
@@ -580,7 +594,11 @@ ompl::base::PlannerStatus ompl::geometric::AdaptLazyPRM::solve(const base::Plann
     for (const auto& ew : *tmpWeight_){
         weightProperty_[ew.first] = base::Cost(ew.second);
     }
-
+    for (auto& s : collision_state_){
+        si_->freeState(s);
+    }
+    collision_state_.clear();
+    
     if (enableExploration_)
     {
         if (int(++solvedCount_) % int(magic::VERTEX_CLEARING_TIMING) == 0 || boost::num_vertices(g_) > magic::MAX_VERTICES / 2)
@@ -763,6 +781,7 @@ ompl::base::PathPtr ompl::geometric::AdaptLazyPRM::constructSolution(const Verte
                     neighbors.insert(*nbh);
                 }
             }
+            collision_state_.insert(si_->cloneState(stateProperty_[*it]));
             // Remove vertex from nearest neighbors data structure.
             // if (vertexUtilization_[*it] > 0)
             // {
@@ -821,6 +840,8 @@ ompl::base::PathPtr ompl::geometric::AdaptLazyPRM::constructSolution(const Verte
         }
         if (!(evd & VALIDITY_TRUE))
         {
+            collision_state_.insert(si_->cloneState(stateProperty_[pos]));
+            collision_state_.insert(si_->cloneState(stateProperty_[prevVertex]));
             if (tmpWeight_ && edgeUtilization_[e] >= usefulUtilization_) //used to be a useful edge
             {
                 auto& wp = weightProperty_[e];
@@ -867,8 +888,7 @@ void ompl::geometric::AdaptLazyPRM::updateUtilization()
         short int &vertexUtilization = vertexUtilization_[v];
         if (vertexUtilization < 1)
             vertexUtilization = 1;
-        vertexUtilization = log(vertexUtilization + std::max(
-            1.0, std::min(iterations_ / 1000.0, 3.0))) / log(1.1);
+        vertexUtilization = log(vertexUtilization + iterations_ / 500.0) * 25;
         if (vertexUtilization > usefulUtilization_ && 
                 std::find(usefulVertex_.begin(), usefulVertex_.end(), v) == usefulVertex_.end()){
             usefulVertex_.push_back(v);
@@ -880,8 +900,7 @@ void ompl::geometric::AdaptLazyPRM::updateUtilization()
         short int &edgeUtilization = edgeUtilization_[e];
         if (edgeUtilization < 1)
             edgeUtilization = 1;
-        edgeUtilization = log(edgeUtilization + std::max(
-            1.0, std::min(iterations_ / 1000.0, 3.0))) / log(1.1);
+        edgeUtilization = log(edgeUtilization + iterations_ / 500.0) * 25;
     }
 }
 

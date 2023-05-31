@@ -420,6 +420,8 @@ namespace ompl
 
             std::vector<Vertex> usefulVertex_;
 
+            std::set<base::State*> collision_state_;
+
             /** \brief Access the validity state of an edge */
             boost::property_map<Graph, edge_flags_t>::type edgeValidityProperty_;
 
