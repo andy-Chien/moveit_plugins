@@ -244,7 +244,7 @@ void ompl::geometric::AdaptLazyPRM::setup()
     }
 
     validSampler_ = si_->allocValidStateSampler();
-    validSampler_->setNrAttempts(1);
+    validSampler_->setNrAttempts(3);
     simpleSampler_ = si_->allocStateSampler();
 }
 
@@ -446,7 +446,7 @@ ompl::base::PlannerStatus ompl::geometric::AdaptLazyPRM::solve(const base::Plann
     }
 
     unsigned long int nrStartStates = boost::num_vertices(g_);
-    OMPL_WARN("%s: Starting planning with %lu states already in datastructure", getName().c_str(), nrStartStates);
+    OMPL_WARN("[OMPL]: Starting planning with %lu states already in datastructure, usefullvertex size = %lu", nrStartStates, usefulVertex_.size());
 
     enableExploration_ = explorationCondition();
     bestCost_ = opt_->infiniteCost();
