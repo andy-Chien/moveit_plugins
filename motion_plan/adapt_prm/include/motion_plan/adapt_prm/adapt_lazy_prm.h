@@ -308,7 +308,7 @@ namespace ompl
 
             /** \brief Given two milestones from the same connected component, construct a path connecting them and set
              * it as the solution */
-            ompl::base::PathPtr constructSolution(const Vertex &start, const Vertex &goal);
+            ompl::base::PathPtr constructSolution(const Vertex &start, const Vertex &goal, const bool is_first_try);
 
             /** \brief Compute distance between two milestones (this is simply distance between the states of the
              * milestones) */

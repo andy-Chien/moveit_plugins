@@ -93,7 +93,7 @@ namespace ompl
 
         if (!usefulMilestone_.empty())
         {
-          double nearestDist = std::numeric_limits<double>::max();
+          double nearestDist = bound_ * 3;
           auto nearest_it = usefulMilestone_.end();
           for (auto it = usefulMilestone_.begin(); it != usefulMilestone_.end(); ++it) 
           {

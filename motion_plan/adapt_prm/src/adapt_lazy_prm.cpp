@@ -148,7 +148,7 @@ ompl::geometric::AdaptLazyPRM::AdaptLazyPRM(const base::PlannerData &data, bool 
                 Vertex graph_vertex = boost::add_vertex(g_);
                 stateProperty_[graph_vertex] = si_->cloneState(data_vertex.getState());
                 vertexValidityProperty_[graph_vertex] = VALIDITY_UNKNOWN;
-                unsigned long int newComponent = componentCount_++;
+                unsigned long int newComponent = ++componentCount_;
                 vertexComponentProperty_[graph_vertex] = newComponent;
                 vertices[vertex_index] = graph_vertex;
                 vertexUtilization_[graph_vertex] = magic::LOWEST_ATH_UTILIZATION;
@@ -383,7 +383,7 @@ ompl::geometric::AdaptLazyPRM::Vertex ompl::geometric::AdaptLazyPRM::addMileston
     Vertex m = boost::add_vertex(g_);
     stateProperty_[m] = state;
     vertexValidityProperty_[m] = VALIDITY_UNKNOWN;
-    unsigned long int newComponent = componentCount_++;
+    unsigned long int newComponent = ++componentCount_;
     vertexComponentProperty_[m] = newComponent;
     componentSize_[newComponent] = 1;
     vertexUtilization_[m] = 0;
@@ -474,17 +474,24 @@ ompl::base::PlannerStatus ompl::geometric::AdaptLazyPRM::solve(const base::Plann
         if (enableExploration_)
         {
             iterations++;
-            if (boost::num_vertices(g_) > magic::MAX_VERTICES)
-                break;
+            // if (boost::num_vertices(g_) > magic::MAX_VERTICES)
+            //     break;
             if (bestSolution && boundsComputed < 1){
                 boundsComputed += 2;
                 boundsSample = true;
                 computeBounds(bestSolution, bounds);
             }
-            else if (solution && !boundsComputed){
-                boundsComputed += 1;
-                boundsSample = true;
-                computeBounds(solution, bounds);
+            // else if (solution && !boundsComputed){
+            //     boundsComputed += 1;
+            //     boundsSample = true;
+            //     computeBounds(solution, bounds);
+            // }
+            if (boundsSample){
+                boundsSample = false;
+                setBounds(bounds);
+            }else{
+                boundsSample = boundsComputed;
+                resetBounds();
             }
             
             if (++sample_near_collision % 3 == 0 && !collision_state_.empty()){
@@ -531,20 +538,13 @@ ompl::base::PlannerStatus ompl::geometric::AdaptLazyPRM::solve(const base::Plann
                 optimizingComponentSegments = 0;
             }
 
-            if (boundsSample){
-                boundsSample = false;
-                setBounds(bounds);
-            }else{
-                boundsSample = boundsComputed;
-                resetBounds();
-            }
-
             Vertex startV = startM_[startGoalPair.first];
             Vertex goalV = goalM_[startGoalPair.second];
-
+            bool is_first_try = true;
             do
             {
-                solution = constructSolution(startV, goalV);
+                solution = constructSolution(startV, goalV, is_first_try);
+                is_first_try = false;
             } while (!solution && vertexComponentProperty_[startV] == vertexComponentProperty_[goalV] && !ptc);
 
             if (solution)
@@ -687,7 +687,8 @@ long int ompl::geometric::AdaptLazyPRM::solutionComponent(std::pair<std::size_t,
     return -1;
 }
 
-ompl::base::PathPtr ompl::geometric::AdaptLazyPRM::constructSolution(const Vertex &start, const Vertex &goal)
+ompl::base::PathPtr ompl::geometric::AdaptLazyPRM::constructSolution(
+    const Vertex &start, const Vertex &goal, const bool is_first_try)
 {
     // Need to update the index map here, becuse nodes may have been removed and
     // the numbering will not be 0 .. N-1 otherwise.
@@ -781,7 +782,8 @@ ompl::base::PathPtr ompl::geometric::AdaptLazyPRM::constructSolution(const Verte
                     neighbors.insert(*nbh);
                 }
             }
-            collision_state_.insert(si_->cloneState(stateProperty_[*it]));
+            if (is_first_try)
+                collision_state_.insert(si_->cloneState(stateProperty_[*it]));
             // Remove vertex from nearest neighbors data structure.
             // if (vertexUtilization_[*it] > 0)
             // {
@@ -809,7 +811,7 @@ ompl::base::PathPtr ompl::geometric::AdaptLazyPRM::constructSolution(const Verte
         {
             if (comp == vertexComponentProperty_[neighbor])
             {
-                unsigned long int newComponent = componentCount_++;
+                unsigned long int newComponent = ++componentCount_;
                 componentSize_[newComponent] = 0;
                 markComponent(neighbor, newComponent);
             }
@@ -840,8 +842,10 @@ ompl::base::PathPtr ompl::geometric::AdaptLazyPRM::constructSolution(const Verte
         }
         if (!(evd & VALIDITY_TRUE))
         {
-            collision_state_.insert(si_->cloneState(stateProperty_[pos]));
-            collision_state_.insert(si_->cloneState(stateProperty_[prevVertex]));
+            if (is_first_try){
+                collision_state_.insert(si_->cloneState(stateProperty_[pos]));
+                collision_state_.insert(si_->cloneState(stateProperty_[prevVertex]));
+            }
             if (tmpWeight_ && edgeUtilization_[e] >= usefulUtilization_) //used to be a useful edge
             {
                 auto& wp = weightProperty_[e];
@@ -850,7 +854,7 @@ ompl::base::PathPtr ompl::geometric::AdaptLazyPRM::constructSolution(const Verte
             }else{
                 boost::remove_edge(e, g_);
             }
-            unsigned long int newComponent = componentCount_++;
+            unsigned long int newComponent = ++componentCount_;
             componentSize_[newComponent] = 0;
             markComponent(pos, newComponent);
             solution_validity = false;
