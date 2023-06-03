@@ -356,6 +356,14 @@ void ompl::geometric::AdaptLazyPRM::clearValidity()
         vertexValidityProperty_[v] = VALIDITY_UNKNOWN;
     foreach (const Edge e, boost::edges(g_))
         edgeValidityProperty_[e] = VALIDITY_UNKNOWN;
+    for (auto& v : usefulVertex_){
+        const base::State *st = stateProperty_[v];
+        if (si_->isValid(st))
+            vertexValidityProperty_[v] |= (VALIDITY_TRUE | VALIDITY_KNOWN);
+        else
+            vertexValidityProperty_[v] |= VALIDITY_KNOWN;
+    }
+    resetComponent();
 }
 
 void ompl::geometric::AdaptLazyPRM::clear()
@@ -381,16 +389,57 @@ void ompl::geometric::AdaptLazyPRM::freeMemory()
 ompl::geometric::AdaptLazyPRM::Vertex ompl::geometric::AdaptLazyPRM::addMilestone(base::State *state)
 {
     Vertex m = boost::add_vertex(g_);
+    addMilestone(state, m, false);
+    return m;
+}
+
+
+bool ompl::geometric::AdaptLazyPRM::addMilestone(base::State *state, Vertex m, bool filter)
+{
     stateProperty_[m] = state;
+    std::vector<Vertex> nbs;
+
+    nn_->nearestK(m, 3, nbs);
+    if (nbs.size() > 0)
+    {
+        double dis = 0;
+        foreach (Vertex n, nbs){
+            const auto& vd = vertexValidityProperty_[n];
+            if (!vd || (vd & VALIDITY_TRUE)){
+                dis += distanceFunction(m, n);
+            }else{
+                dis += avg_dis_;
+            }
+        }
+        dis /= nbs.size();
+
+        if (filter && dis < avg_dis_)
+        {
+            const double r = static_cast<double>(std::rand()) / static_cast<double>(RAND_MAX);
+            if (r > (dis / avg_dis_) * dis_accept_factor_){
+                dis_accept_factor_ /= 0.95;
+                return false;
+            }else{
+                dis_accept_factor_ *= 0.95;
+            }
+        }
+        avg_dis_ *= avg_dis_cnt_ / (++avg_dis_cnt_);
+        avg_dis_ += dis / avg_dis_cnt_;
+    }
+
+    std::cout<<avg_dis_<<", "<<std::flush;
+
     vertexValidityProperty_[m] = VALIDITY_UNKNOWN;
     unsigned long int newComponent = ++componentCount_;
     vertexComponentProperty_[m] = newComponent;
     componentSize_[newComponent] = 1;
     vertexUtilization_[m] = 0;
 
-    // Which milestones will we attempt to connect to?
     const std::vector<Vertex> &neighbors = connectionStrategy_(m);
+
+    // Which milestones will we attempt to connect to?
     foreach (Vertex n, neighbors)
+    {
         if (connectionFilter_(m, n))
         {
             const base::Cost weight = opt_->motionCost(stateProperty_[m], stateProperty_[n]);
@@ -400,10 +449,9 @@ ompl::geometric::AdaptLazyPRM::Vertex ompl::geometric::AdaptLazyPRM::addMileston
             edgeUtilization_[e] = 0;
             uniteComponents(m, n, true);
         }
-
+    }
     nn_->add(m);
-
-    return m;
+    return true;
 }
 
 ompl::base::PlannerStatus ompl::geometric::AdaptLazyPRM::solve(const base::PlannerTerminationCondition &ptc)
@@ -411,6 +459,9 @@ ompl::base::PlannerStatus ompl::geometric::AdaptLazyPRM::solve(const base::Plann
     std::lock_guard<std::mutex> _(graphMutex_);
     // unsigned long int nvg = boost::num_vertices(g_);
     checkValidity();
+    avg_dis_ = 0;
+    avg_dis_cnt_ = 0;
+    dis_accept_factor_ = 0.5;
     auto *goal = dynamic_cast<base::GoalSampleableRegion *>(pdef_->getGoal().get());
     if (goal == nullptr)
     {
@@ -456,6 +507,7 @@ ompl::base::PlannerStatus ompl::geometric::AdaptLazyPRM::solve(const base::Plann
     bool someSolutionFound = false;
     bool fullyOptimized = false;
     bool boundsSample = false;
+    bool firstConstruct = true;
     size_t sample_near_collision = 0;
     uint8_t boundsComputed = 0;
     unsigned int optimizingComponentSegments = 0;
@@ -494,19 +546,32 @@ ompl::base::PlannerStatus ompl::geometric::AdaptLazyPRM::solve(const base::Plann
                 resetBounds();
             }
             
+            bool near_sample = false;
             if (++sample_near_collision % 3 == 0 && !collision_state_.empty()){
                 const auto r = std::rand() % collision_state_.size();
                 auto it = collision_state_.begin();
                 std::advance(it, r);
                 if (!validSampler_->sampleNear(workState, *it, 3.0))
                     simpleSampler_->sampleUniform(workState);
+                else
+                    near_sample = true;
                 si_->freeState(*it);
                 collision_state_.erase(*it);
             }else{
                 simpleSampler_->sampleUniform(workState);
             }
 
-            Vertex addedVertex = addMilestone(si_->cloneState(workState));
+            Vertex addedVertex = boost::add_vertex(g_);
+            if(firstConstruct || someSolutionFound || near_sample)
+            {
+                addMilestone(si_->cloneState(workState), addedVertex, false);
+            }
+            else if (!addMilestone(si_->cloneState(workState), addedVertex, true))
+            {
+                si_->freeState(stateProperty_[addedVertex]);
+                boost::remove_vertex(addedVertex, g_);
+                continue;
+            }
             new_vertex_component = (long int)vertexComponentProperty_[addedVertex];
         }
 
@@ -528,6 +593,7 @@ ompl::base::PlannerStatus ompl::geometric::AdaptLazyPRM::solve(const base::Plann
             (!someSolutionFound || new_vertex_component == solComponent))
         // if (solComponent != -1 && !someSolutionFound)
         {
+            firstConstruct = false;
             // If we already have a solution, we are optimizing. We check that we added at least
             // a few segments to the connected component that includes the previously found
             // solution before attempting to construct a new solution.
@@ -870,7 +936,7 @@ ompl::base::PathPtr ompl::geometric::AdaptLazyPRM::constructSolution(
         ++state;
         prevVertex = pos;
         pos = prev[pos];
-    } while (prevVertex != pos);
+    } while (prevVertex != pos && solution_validity);
     if (!solution_validity)
         return base::PathPtr();
 

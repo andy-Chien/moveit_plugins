@@ -293,6 +293,7 @@ namespace ompl
                structure
                 and then connect it to the roadmap in accordance to the connection strategy. */
             Vertex addMilestone(base::State *state);
+            bool addMilestone(base::State *state, Vertex v, bool filter=true);
 
             void resetComponent();
 
@@ -314,8 +315,7 @@ namespace ompl
              * milestones) */
             double distanceFunction(const Vertex a, const Vertex b) const
             {
-                double distance = si_->distance(stateProperty_[a], stateProperty_[b]);
-                return distance;
+                return si_->distance(stateProperty_[a], stateProperty_[b]);
             }
 
             /** \brief Given two vertices, returns a heuristic on the cost of the path connecting them.
@@ -452,7 +452,10 @@ namespace ompl
             mutable std::mutex graphMutex_;
 
             std::thread* simplifyGrapgThread_{nullptr};
-
+            
+            double avg_dis_{0};
+            double avg_dis_cnt_{0};
+            double dis_accept_factor_{1};
 
         };
     }
