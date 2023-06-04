@@ -35,8 +35,12 @@
 /* Author: Luis G. Torres, Jonathan Gammell */
 
 #include "motion_plan/objectives/PathLengthUtilizationOptimizationObjective.h"
+#include "motion_plan/ompl_interface/parameterization/joint_space/joint_model_state_space.h"
 #include <memory>
 #include <ompl/base/samplers/informed/PathLengthDirectInfSampler.h>
+
+
+using StateType = ompl_interface::JointModelStateSpace::StateType;
 
 ompl::base::PathLengthUtilizationOptimizationObjective::PathLengthUtilizationOptimizationObjective(const SpaceInformationPtr &si)
   : ompl::base::OptimizationObjective(si)
@@ -55,13 +59,28 @@ ompl::base::Cost ompl::base::PathLengthUtilizationOptimizationObjective::stateCo
 
 ompl::base::Cost ompl::base::PathLengthUtilizationOptimizationObjective::motionCost(const State *s1, const State *s2) const
 {
-    return Cost(si_->distance(s1, s2));
+    if (!s1->as<StateType>()->isPoseComputed() || !s2->as<StateType>()->isPoseComputed()){
+        std::cerr<<"[PathLengthUtilizationOptimizationObjective] State FK Not Computed!"<<std::endl;
+        return Cost(si_->distance(s1, s2));
+    }
+    const auto& pos_dis = [](const std::array<double, 3>& a, const std::array<double, 3>& b){
+        return std::hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]);
+    };
+    const auto& quat_dis = [](const std::array<double, 4>& a, const std::array<double, 4>& b){
+        const std::array<double, 4> d = {a[0] - b[0], a[1] - b[1], a[2] - b[2], a[3] - b[3]};
+        const double qd = sqrt(d[0]*d[0] + d[1]*d[1] + d[2]*d[2] + d[3]*d[3]);
+        return (qd > 1) ? 2 - qd : qd;
+    };
+    const double jl = si_->distance(s1, s2);
+    const double pl = pos_dis(s1->as<StateType>()->pos, s2->as<StateType>()->pos);
+    const double ql = quat_dis(s1->as<StateType>()->quat, s2->as<StateType>()->quat);
+    return Cost(0.2 * jl + 0.4 * pl + 0.4 * ql);
 }
 
 ompl::base::Cost ompl::base::PathLengthUtilizationOptimizationObjective::motionCost(const State *s1, const State *s2,
                                                                                     const float uti1, const float uti2) const
 {
-    float dis = si_->distance(s1, s2);
+    float dis = motionCost(s1, s2).value();
     return Cost(distance_weight_ * dis + (1 - distance_weight_) * dis * (1 - (uti1 + uti2) / 2));
 }
 

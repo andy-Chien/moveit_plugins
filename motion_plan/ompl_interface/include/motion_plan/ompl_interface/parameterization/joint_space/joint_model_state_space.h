@@ -87,6 +87,8 @@ public:
 
   void copyToOMPLState(ompl::base::State* state, const moveit::core::RobotState& rstate) const override;
 
+  void sanityChecks() const override;
+
   const std::string& getParameterizationType() const override
   {
     return PARAMETERIZATION_TYPE;

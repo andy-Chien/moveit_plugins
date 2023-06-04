@@ -148,25 +148,16 @@ void ompl_interface::JointModelStateSpace::interpolate(const ompl::base::State* 
   computeStateFK(state);
 }
 
+void ompl_interface::JointModelStateSpace::sanityChecks() const
+{
+  ModelBasedStateSpace::sanityChecks(std::numeric_limits<double>::epsilon(), std::numeric_limits<float>::epsilon(),
+                                     ~ompl::base::StateSpace::STATESPACE_TRIANGLE_INEQUALITY);
+}
+
 double ompl_interface::JointModelStateSpace::distance(const ompl::base::State* state1,
                                                       const ompl::base::State* state2) const
 {
-  if (!state1->as<StateType>()->isPoseComputed() || !state2->as<StateType>()->isPoseComputed()){
-    RCLCPP_ERROR(LOGGER, "State FK Not Computed!");
-    return group_->distance(state1->as<StateType>()->values, state2->as<StateType>()->values);
-  }
-  const auto& pos_dis = [](const std::array<double, 3>& a, const std::array<double, 3>& b){
-    return std::hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]);
-  };
-  const auto& quat_dis = [](const std::array<double, 4>& a, const std::array<double, 4>& b){
-    const std::array<double, 4> d = {a[0] - b[0], a[1] - b[1], a[2] - b[2], a[3] - b[3]};
-    const double qd = sqrt(d[0]*d[0] + d[1]*d[1] + d[2]*d[2] + d[3]*d[3]);
-    return (qd > 1) ? 2 - qd : qd;
-  };
-  const double jl = group_->distance(state1->as<StateType>()->values, state2->as<StateType>()->values);
-  const double pl = pos_dis(state1->as<StateType>()->pos, state2->as<StateType>()->pos);
-  const double ql = quat_dis(state1->as<StateType>()->quat, state2->as<StateType>()->quat);
-  return 0.2 * jl + 0.4 * pl + 0.4 * ql;
+  return group_->distance(state1->as<StateType>()->values, state2->as<StateType>()->values);
 }
 
 ompl::base::StateSamplerPtr ompl_interface::JointModelStateSpace::allocDefaultStateSampler() const

@@ -81,7 +81,9 @@ public:
             const size_t points_cnt = req->trajectory.points.size();
             const size_t joints_cnt = req->trajectory.joint_names.size();
             std::vector<Eigen::Vector3d> pos_list;
+            std::vector<std::array<const double, 4>> quat_list;
             pos_list.reserve(points_cnt);
+            quat_list.reserve(points_cnt);
 
             if(state_->getRobotModel()->hasLinkModel(req->target_link))
             {
@@ -90,14 +92,19 @@ public:
                         state_->setJointPositions(req->trajectory.joint_names[i], &point.positions[i]);
                     }
                     state_->update();
-                    pos_list.push_back(state_->getGlobalLinkTransform(req->target_link).translation());
+                    const auto& t = state_->getGlobalLinkTransform(req->target_link);
+                    pos_list.emplace_back(t.translation());
+                    const auto& q = Eigen::Quaterniond(t.linear());
+                    quat_list.emplace_back(std::array<const double, 4>({q.w(), q.x(), q.y(), q.z()}));
                 }
             }else{
                 RCLCPP_ERROR(node_->get_logger(), "%s link is not included.", req->target_link.c_str());
             }
             const bool update_tool_traj_length = pos_list.size() == points_cnt;
+            const bool update_quat_traj_length = quat_list.size() == points_cnt;
             res->joint_traj_length = 0;
             res->tool_traj_length = 0;
+            res->quat_traj_length = 0;
             for(size_t i=0; i<points_cnt - 1; i++){
                 const auto& p1 = req->trajectory.points[i];
                 const auto& p2 = req->trajectory.points[i + 1];
@@ -107,6 +114,13 @@ public:
                 if(update_tool_traj_length){
                     const auto& v = pos_list[i + 1] - pos_list[i];
                     res->tool_traj_length += std::hypot(v(0), v(1), v(2));
+                }
+                if(update_quat_traj_length){
+                    const auto& a = quat_list[i + 1];
+                    const auto& b = quat_list[i];
+                    const std::array<double, 4> d = {a[0] - b[0], a[1] - b[1], a[2] - b[2], a[3] - b[3]};
+                    const double qd = sqrt(d[0]*d[0] + d[1]*d[1] + d[2]*d[2] + d[3]*d[3]);
+                    res->quat_traj_length += (qd > 1) ? 2 - qd : qd;
                 }
             }
         }
