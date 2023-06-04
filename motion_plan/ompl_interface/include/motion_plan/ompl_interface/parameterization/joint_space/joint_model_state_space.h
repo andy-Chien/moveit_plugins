@@ -45,11 +45,58 @@ class JointModelStateSpace : public ModelBasedStateSpace
 public:
   static const std::string PARAMETERIZATION_TYPE;
 
+  class StateType : public ModelBasedStateSpace::StateType
+  {
+  public:
+    enum
+    {
+      POSE_COMPUTED = 32
+    };
+
+    StateType() : ModelBasedStateSpace::StateType()
+    {
+    }
+    bool isPoseComputed() const
+    {
+      return flags & POSE_COMPUTED;
+    }
+    void markPoseComputed()
+    {
+      flags |= POSE_COMPUTED;
+    }
+    std::array<double, 3> pos{{0,0,0}};
+    std::array<double, 4> quat{{1,0,0,0}};
+  };
   JointModelStateSpace(const ModelBasedStateSpaceSpecification& spec);
+  ~JointModelStateSpace() override;
+
+  ompl::base::State* allocState() const override;
+
+  void freeState(ompl::base::State* state) const override;
+
+  bool computeStateFK(ompl::base::State* state) const;
+
+  void interpolate(const ompl::base::State* from, const ompl::base::State* to, const double t,
+                   ompl::base::State* state) const override;
+
+  double distance(const ompl::base::State* state1, const ompl::base::State* state2) const override;
+
+  ompl::base::StateSamplerPtr allocDefaultStateSampler() const override;
+
+  void copyState(ompl::base::State* destination, const ompl::base::State* source) const override;
+
+  void copyToOMPLState(ompl::base::State* state, const moveit::core::RobotState& rstate) const override;
 
   const std::string& getParameterizationType() const override
   {
     return PARAMETERIZATION_TYPE;
   }
+private:
+  void setKinematics(const moveit::core::JointModelGroup::KinematicsSolver& k);
+  bool computeStateFK(StateType* full_state) const;
+  const moveit::core::JointModelGroup* group_;
+  kinematics::KinematicsBasePtr k_solver_;
+  std::vector<size_t> bijection_;
+  std::vector<std::string> fk_link_;
 };
 }  // namespace ompl_interface
