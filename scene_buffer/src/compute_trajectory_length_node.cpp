@@ -85,6 +85,23 @@ public:
             pos_list.reserve(points_cnt);
             quat_list.reserve(points_cnt);
 
+            const auto& joint_dis = [&](const auto& p1, const auto& p2){
+                double dis = 0;
+                for(size_t j=0; j<joints_cnt; j++){
+                    dis += fabs(p2.positions[j] - p1.positions[j]);
+                }
+                return dis;
+            };
+            const auto& pos_dis = [&](const auto& p1, const auto& p2){
+                const auto& v = p2 - p1;
+                return std::hypot(v(0), v(1), v(2));
+            };
+            const auto& quat_dis = [&](const auto& b, const auto& a){
+                const std::array<double, 4> d = {a[0] - b[0], a[1] - b[1], a[2] - b[2], a[3] - b[3]};
+                const double qd = sqrt(d[0]*d[0] + d[1]*d[1] + d[2]*d[2] + d[3]*d[3]);
+                return (qd > 1) ? 2 - qd : qd;
+            };
+            
             if(state_->getRobotModel()->hasLinkModel(req->target_link))
             {
                 for(const auto& point : req->trajectory.points){
@@ -105,23 +122,28 @@ public:
             res->joint_traj_length = 0;
             res->tool_traj_length = 0;
             res->quat_traj_length = 0;
-            for(size_t i=0; i<points_cnt - 1; i++){
-                const auto& p1 = req->trajectory.points[i];
-                const auto& p2 = req->trajectory.points[i + 1];
-                for(size_t j=0; j<joints_cnt; j++){
-                    res->joint_traj_length += fabs(p2.positions[j] - p1.positions[j]);
-                }
+            for(size_t i=0; i<points_cnt - 1; i++)
+            {
+                res->joint_traj_length += joint_dis(req->trajectory.points[i], req->trajectory.points[i + 1]);
                 if(update_tool_traj_length){
-                    const auto& v = pos_list[i + 1] - pos_list[i];
-                    res->tool_traj_length += std::hypot(v(0), v(1), v(2));
+                    res->tool_traj_length += pos_dis(pos_list[i], pos_list[i + 1]);
                 }
                 if(update_quat_traj_length){
-                    const auto& a = quat_list[i + 1];
-                    const auto& b = quat_list[i];
-                    const std::array<double, 4> d = {a[0] - b[0], a[1] - b[1], a[2] - b[2], a[3] - b[3]};
-                    const double qd = sqrt(d[0]*d[0] + d[1]*d[1] + d[2]*d[2] + d[3]*d[3]);
-                    res->quat_traj_length += (qd > 1) ? 2 - qd : qd;
+                    res->quat_traj_length += quat_dis(quat_list[i], quat_list[i + 1]);
                 }
+            }
+            res->joint_traj_length_ratio = 0;
+            res->tool_traj_length_ratio = 0;
+            res->quat_traj_length_ratio = 0;
+            const double j_min = joint_dis(req->trajectory.points[0], req->trajectory.points.back());
+            res->joint_traj_length_ratio = res->joint_traj_length / (j_min + 0.001);
+            if(update_tool_traj_length){
+                const double t_min = pos_dis(pos_list[0], pos_list.back());
+                res->tool_traj_length_ratio = res->tool_traj_length / (t_min + 0.001);
+            }
+            if(update_quat_traj_length){
+                const double q_min = quat_dis(quat_list[0], quat_list.back());
+                res->quat_traj_length_ratio = res->quat_traj_length / (q_min + 0.001);
             }
         }
         moveit::core::RobotModelPtr model_;

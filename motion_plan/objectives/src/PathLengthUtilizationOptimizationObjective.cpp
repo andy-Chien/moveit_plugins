@@ -74,7 +74,7 @@ ompl::base::Cost ompl::base::PathLengthUtilizationOptimizationObjective::motionC
     const double jl = si_->distance(s1, s2);
     const double pl = pos_dis(s1->as<StateType>()->pos, s2->as<StateType>()->pos);
     const double ql = quat_dis(s1->as<StateType>()->quat, s2->as<StateType>()->quat);
-    return Cost(0.2 * jl + 0.4 * pl + 0.4 * ql);
+    return Cost(0.6 * jl + 0.2 * pl + 0.2 * ql);
 }
 
 ompl::base::Cost ompl::base::PathLengthUtilizationOptimizationObjective::motionCost(const State *s1, const State *s2,
