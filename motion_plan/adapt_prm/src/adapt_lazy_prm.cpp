@@ -77,11 +77,11 @@ namespace ompl
             extraction */
         static const unsigned int MIN_ADDED_SEGMENTS_FOR_LAZY_OPTIMIZATION = 5;
 
-        static const unsigned int MAX_SOLUTIONS_FOR_LAZY_OPTIMIZATION = 50;
+        static const unsigned int MAX_SOLUTIONS_FOR_LAZY_OPTIMIZATION = 66;
 
         static const unsigned int VERTEX_CLEARING_TIMING = 1;
 
-        static const short int UTILIZATION_THRESHOLD = 0;
+        static const short int UTILIZATION_THRESHOLD = -1;
 
         static const short int LOWEST_ATH_UTILIZATION = 25;
 
@@ -102,6 +102,7 @@ ompl::geometric::AdaptLazyPRM::AdaptLazyPRM(const base::SpaceInformationPtr &si,
   , vertexUtilization_(boost::get(vertex_utilization_t(), g_))
   , edgeValidityProperty_(boost::get(edge_flags_t(), g_))
 {
+    setName("AdaptLazyPRM");
     specs_.recognizedGoal = base::GOAL_SAMPLEABLE_REGION;
     specs_.approximateSolutions = false;
     specs_.optimizingPaths = true;
@@ -397,37 +398,33 @@ ompl::geometric::AdaptLazyPRM::Vertex ompl::geometric::AdaptLazyPRM::addMileston
 bool ompl::geometric::AdaptLazyPRM::addMilestone(base::State *state, Vertex m, bool filter)
 {
     stateProperty_[m] = state;
-    std::vector<Vertex> nbs;
 
-    nn_->nearestK(m, 3, nbs);
-    if (nbs.size() > 0)
+    std::vector<Vertex> nbs;
+    const auto& nbs_size = [this, &nbs, &m](){
+        nn_->nearestK(m, 3, nbs);
+        return nbs.size();
+    };
+
+    const bool sample_far = (std::rand() % 5) > 0;
+    if (filter && nbs_size() > 0 && sample_far)
     {
         double dis = 0;
         foreach (Vertex n, nbs){
-            const auto& vd = vertexValidityProperty_[n];
-            if (!vd || (vd & VALIDITY_TRUE)){
-                dis += distanceFunction(m, n);
-            }else{
-                dis += avg_dis_;
-            }
+            dis += distanceFunction(m, n);
         }
         dis /= nbs.size();
-
-        if (filter && dis < avg_dis_)
+        
+        if (dis < (maxDistance_ / 2))
         {
             const double r = static_cast<double>(std::rand()) / static_cast<double>(RAND_MAX);
-            if (r > (dis / avg_dis_) * dis_accept_factor_){
+            if (r > (dis / (maxDistance_ / 2)) * dis_accept_factor_){
                 dis_accept_factor_ /= 0.95;
                 return false;
             }else{
                 dis_accept_factor_ *= 0.95;
             }
         }
-        avg_dis_ *= avg_dis_cnt_ / (++avg_dis_cnt_);
-        avg_dis_ += dis / avg_dis_cnt_;
     }
-
-    std::cout<<avg_dis_<<", "<<std::flush;
 
     vertexValidityProperty_[m] = VALIDITY_UNKNOWN;
     unsigned long int newComponent = ++componentCount_;
@@ -459,9 +456,7 @@ ompl::base::PlannerStatus ompl::geometric::AdaptLazyPRM::solve(const base::Plann
     std::lock_guard<std::mutex> _(graphMutex_);
     // unsigned long int nvg = boost::num_vertices(g_);
     checkValidity();
-    avg_dis_ = 0;
-    avg_dis_cnt_ = 0;
-    dis_accept_factor_ = 0.5;
+
     auto *goal = dynamic_cast<base::GoalSampleableRegion *>(pdef_->getGoal().get());
     if (goal == nullptr)
     {
@@ -501,6 +496,7 @@ ompl::base::PlannerStatus ompl::geometric::AdaptLazyPRM::solve(const base::Plann
 
     enableExploration_ = explorationCondition();
     bestCost_ = opt_->infiniteCost();
+    dis_accept_factor_ = 0.5;
     base::State *workState = si_->allocState();
     std::pair<std::size_t, std::size_t> startGoalPair;
     base::PathPtr bestSolution;
@@ -538,31 +534,43 @@ ompl::base::PlannerStatus ompl::geometric::AdaptLazyPRM::solve(const base::Plann
             //     boundsSample = true;
             //     computeBounds(solution, bounds);
             // }
-            if (boundsSample){
-                boundsSample = false;
-                setBounds(bounds);
-            }else{
-                boundsSample = boundsComputed;
-                resetBounds();
-            }
+            // if (boundsSample){
+            //     boundsSample = false;
+            //     setBounds(bounds);
+            // }else{
+            //     boundsSample = boundsComputed;
+            //     resetBounds();
+            // }
             
             bool near_sample = false;
-            if (++sample_near_collision % 3 == 0 && !collision_state_.empty()){
+            const auto rs = std::rand() % 5;
+            if (rs == 0 && !collision_state_.empty()){
                 const auto r = std::rand() % collision_state_.size();
                 auto it = collision_state_.begin();
                 std::advance(it, r);
-                if (!validSampler_->sampleNear(workState, *it, 3.0))
+                if (!validSampler_->sampleNear(workState, *it, (maxDistance_ / 2)))
                     simpleSampler_->sampleUniform(workState);
                 else
                     near_sample = true;
-                si_->freeState(*it);
-                collision_state_.erase(*it);
+                // si_->freeState(*it);
+                // collision_state_.erase(*it);
+            }else if (rs == 5 && !usefulVertex_.empty()){
+                const auto r = std::rand() % usefulVertex_.size();
+                const auto& s = stateProperty_[usefulVertex_[r]];
+                if (!validSampler_->sampleNear(workState, s, (maxDistance_ / 2)))
+                    simpleSampler_->sampleUniform(workState);
+                else
+                    near_sample = true;
+            }else if (rs > 2 && boundsSample){
+                setBounds(bounds);
+                simpleSampler_->sampleUniform(workState);
+                resetBounds();
             }else{
                 simpleSampler_->sampleUniform(workState);
             }
 
             Vertex addedVertex = boost::add_vertex(g_);
-            if(firstConstruct || someSolutionFound || near_sample)
+            if(firstConstruct || someSolutionFound || near_sample || true)
             {
                 addMilestone(si_->cloneState(workState), addedVertex, false);
             }
@@ -620,7 +628,7 @@ ompl::base::PlannerStatus ompl::geometric::AdaptLazyPRM::solve(const base::Plann
                     someSolutionFound = true;
                     min_c = opt_->motionCost(stateProperty_[startV], stateProperty_[goalV]);
                 }
-                const base::Cost c = base::Cost((solution->length() + 0.0001) / (min_c.value() + 0.0001));
+                const base::Cost c = base::Cost((solution->cost(opt_).value() + 0.0001) / (min_c.value() + 0.0001));
                 
                 if (opt_->isSatisfied(c) || !enableExploration_)
                 {
@@ -654,6 +662,14 @@ ompl::base::PlannerStatus ompl::geometric::AdaptLazyPRM::solve(const base::Plann
         // if the solution was optimized, we mark it as such
         psol.setOptimized(opt_, bestCost_, fullyOptimized);
         pdef_->addSolutionPath(psol);
+    }
+    else if (bestSolution)
+    {
+        std::cout<<"!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"<<std::endl;
+        std::cout<<"!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"<<std::endl;
+        std::cout<<"!!!!!!!!!!!!!! "<<bestCost_.value()<<" !!!!!!!!!!!!!!!"<<std::endl;
+        std::cout<<"!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"<<std::endl;
+        std::cout<<"!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"<<std::endl;
     }
     removeTerminalPair(startGoalPair);
 
@@ -936,7 +952,7 @@ ompl::base::PathPtr ompl::geometric::AdaptLazyPRM::constructSolution(
         ++state;
         prevVertex = pos;
         pos = prev[pos];
-    } while (prevVertex != pos && solution_validity);
+    } while (prevVertex != pos);
     if (!solution_validity)
         return base::PathPtr();
 
@@ -958,7 +974,7 @@ void ompl::geometric::AdaptLazyPRM::updateUtilization()
         short int &vertexUtilization = vertexUtilization_[v];
         if (vertexUtilization < 1)
             vertexUtilization = 1;
-        vertexUtilization = log(vertexUtilization + iterations_ / 500.0) * 25;
+        vertexUtilization = log(vertexUtilization + iterations_ / 300.0) * 25;
         if (vertexUtilization > usefulUtilization_ && 
                 std::find(usefulVertex_.begin(), usefulVertex_.end(), v) == usefulVertex_.end()){
             usefulVertex_.push_back(v);
@@ -970,7 +986,7 @@ void ompl::geometric::AdaptLazyPRM::updateUtilization()
         short int &edgeUtilization = edgeUtilization_[e];
         if (edgeUtilization < 1)
             edgeUtilization = 1;
-        edgeUtilization = log(edgeUtilization + iterations_ / 500.0) * 25;
+        edgeUtilization = log(edgeUtilization + iterations_ / 300.0) * 25;
     }
 }
 

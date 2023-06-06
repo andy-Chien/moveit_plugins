@@ -453,9 +453,7 @@ namespace ompl
 
             std::thread* simplifyGrapgThread_{nullptr};
             
-            double avg_dis_{0};
-            double avg_dis_cnt_{0};
-            double dis_accept_factor_{1};
+            double dis_accept_factor_{0};
 
         };
     }
