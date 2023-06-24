@@ -3,6 +3,9 @@
 
 #include "scene_buffer/scene_buffer.hpp"
 
+static const rclcpp::Logger ROBOT_LOGGER = rclcpp::get_logger("scene_buffer_robot");
+static const rclcpp::Logger BUFFER_LOGGER = rclcpp::get_logger("scene_buffer");
+
 SceneBuffer::SceneBuffer(const std::string& node_name, const rclcpp::NodeOptions& node_options)
 : Node(node_name, node_options)
 {
@@ -95,6 +98,10 @@ void SceneBuffer::Robot::load_robot(const std::string& urdf, const std::string& 
     }
   }
   obstacles.header.frame_id = "world";
+  obstacles.meshes.reserve(mesh_links.size() + 10); // 10 for attached objects
+  obstacles.primitives.reserve(prim_links.size() + 10);
+  obstacles.meshes_poses.reserve(mesh_links.size() + 10);
+  obstacles.primitives_poses.reserve(prim_links.size() + 10);
   obstacles.meshes_poses.resize(mesh_links.size());
   obstacles.primitives_poses.resize(prim_links.size());
 
@@ -153,6 +160,47 @@ void SceneBuffer::pub_obstacles(const Robot& robot, const uint8_t step) const
       marker.color.g = 0.8;
       marker.color.b = 0.5;
       marker.color.a = 0.1;
+      msg.markers.emplace_back(std::move(marker));
+    }
+  }
+  for(size_t i=links.size(); i < obs.meshes.size(); i++)
+  {
+    const auto& mesh_tri = obs.meshes[i].triangles;
+    const auto& mesh_ver = obs.meshes[i].vertices;
+    for(size_t id=0; id < obs.meshes_poses[i].poses.size(); id++)
+    {
+      if(id % step != 0 && id != obs.meshes_poses[i].poses.size() - 1){
+        continue;
+      }
+      const auto& pose = obs.meshes_poses[i].poses[id];
+      visualization_msgs::msg::Marker marker;
+      marker.header.stamp = time_now;
+      marker.header.frame_id = "world";
+      marker.ns = "attached";
+      marker.id = id;
+      marker.type = visualization_msgs::msg::Marker::TRIANGLE_LIST;
+      marker.action = visualization_msgs::msg::Marker::ADD;
+      marker.lifetime = rclcpp::Duration(std::chrono::seconds(3));
+      marker.frame_locked = false;
+      marker.pose.position.x = pose.pose[0];
+      marker.pose.position.y = pose.pose[1];
+      marker.pose.position.z = pose.pose[2];
+      marker.pose.orientation.w = pose.pose[3];
+      marker.pose.orientation.x = pose.pose[4];
+      marker.pose.orientation.y = pose.pose[5];
+      marker.pose.orientation.z = pose.pose[6];
+      marker.scale.x = 1;
+      marker.scale.y = 1;
+      marker.scale.z = 1;
+      marker.color.r = 0.2;
+      marker.color.g = 0.8;
+      marker.color.b = 0.5;
+      marker.color.a = 0.1;
+      for(const auto& idx : mesh_tri){
+        for(size_t j=0; j<3; j++){
+          marker.points.push_back(mesh_ver[idx.vertex_indices[j]]);
+        }
+      }
       msg.markers.emplace_back(std::move(marker));
     }
   }
@@ -220,15 +268,17 @@ bool SceneBuffer::get_obstacle_cb(
       return true;
     };
 
-  const auto& get_link_poses_from_state = [&eigen_to_msg, &pose_adjust](
+  const auto& get_model_poses_from_state = [&eigen_to_msg, &pose_adjust](
     const std::shared_ptr<Robot>& robot, std::vector<Eigen::Isometry3d>& last_trans){
       const size_t mesh_links_size = robot->mesh_links.size();
       const size_t prim_links_size = robot->prim_links.size();
+      const size_t mesh_attac_size = robot->attached_mesh_obj_idx.size();
+      const size_t prim_attac_size = robot->attached_prim_obj_idx.size();
       const bool check_diff = last_trans.size() != 0;
       if(last_trans.size() == 0){
-        last_trans.resize(mesh_links_size + prim_links_size);
+        last_trans.resize(mesh_links_size + prim_links_size + mesh_attac_size + prim_attac_size);
       }
-      assert(last_trans.size() == mesh_links_size + prim_links_size);
+      assert(last_trans.size() == mesh_links_size + prim_links_size + mesh_attac_size + prim_attac_size);
       const moveit::core::RobotStateConstPtr const_state(robot->state);
       std::vector<Eigen::Isometry3d> trans_list;
       trans_list.reserve(10);
@@ -254,6 +304,28 @@ bool SceneBuffer::get_obstacle_cb(
         }
         last_trans[i + mesh_links_size] = trans_list[0];
       }
+      for(const auto& [name, idx] : robot->attached_mesh_obj_idx){
+        trans_list.clear();
+        trans_list.emplace_back(const_state->getAttachedBody(name)->getGlobalPose());
+        if(check_diff && !pose_adjust(trans_list, last_trans[idx + prim_links_size])){
+          continue;
+        }
+        for(const auto& trans : trans_list){
+          robot->obstacles.meshes_poses[idx].poses.push_back(eigen_to_msg(trans));
+        }
+        last_trans[idx + prim_links_size] = trans_list[0];
+      }
+      for(const auto& [name, idx] : robot->attached_prim_obj_idx){
+        trans_list.clear();
+        trans_list.emplace_back(const_state->getAttachedBody(name)->getGlobalPose());
+        if(check_diff && !pose_adjust(trans_list, last_trans[idx + mesh_links_size + mesh_attac_size])){
+          continue;
+        }
+        for(const auto& trans : trans_list){
+          robot->obstacles.primitives_poses[idx].poses.push_back(eigen_to_msg(trans));
+        }
+        last_trans[idx + mesh_links_size + mesh_attac_size] = trans_list[0];
+      }
     };
 
   const auto& check_running_time_with_delay = 
@@ -263,7 +335,7 @@ bool SceneBuffer::get_obstacle_cb(
     };
 
   const auto& get_pose_from_trajectory = 
-    [&check_running_time_with_delay, &get_link_poses_from_state](
+    [&check_running_time_with_delay, &get_model_poses_from_state](
       const auto& robot, const auto&  trajectory, const auto& start_time, bool running_traj){
         if(!trajectory){
           return;
@@ -284,7 +356,7 @@ bool SceneBuffer::get_obstacle_cb(
               traj_joint_names[i], &(point.positions[i]));
           }
           robot->state->update();
-          get_link_poses_from_state(robot, last_trans);
+          get_model_poses_from_state(robot, last_trans);
         }
       };
 
@@ -340,14 +412,14 @@ bool SceneBuffer::get_obstacle_cb(
 
     const auto& other_robot = robots_.at(other_name);
     other_robot->clean_poses();
-
-    const std::shared_lock<std::shared_mutex> data_lock(other_robot->get_trajectory_data_mutex());
+    const std::lock_guard<std::shared_mutex> state_lock(other_robot->get_state_data_mutex());
+    const std::shared_lock<std::shared_mutex> traj_lock(other_robot->get_trajectory_data_mutex());
 
     if(!(other_robot->planned_trajectory || other_robot->running_trajectory))
     {
       other_robot->update_to_current();
       std::vector<Eigen::Isometry3d> last_trans;
-      get_link_poses_from_state(other_robot, last_trans);
+      get_model_poses_from_state(other_robot, last_trans);
       res->obstacles_list.push_back(other_robot->obstacles);
       continue;
     }
@@ -374,9 +446,6 @@ bool SceneBuffer::get_obstacle_cb(
 
 bool SceneBuffer::Robot::obstacles_from_links()
 {
-  obstacles.meshes.reserve(mesh_links.size());
-  obstacles.primitives.reserve(prim_links.size());
-
   const auto&& mesh_msg_from_shape = [&](const shapes::Mesh* mesh_in){
     auto mesh = *mesh_in;
     mesh.padd(padding_);
@@ -459,6 +528,337 @@ bool SceneBuffer::Robot::obstacles_from_links()
       solid_msg_from_shape(link->getShapes().at(0))));
   }
   return true;
+}
+
+void SceneBuffer::Robot::attachObjectCallback(const moveit_msgs::msg::AttachedCollisionObject::ConstSharedPtr& obj_msg)
+{
+// bool SceneBuffer::Robot::process_attached_collision_object_msg(const moveit_msgs::msg::AttachedCollisionObject& obj_msg)
+  if (obj_msg->object.operation == moveit_msgs::msg::CollisionObject::ADD &&
+      !model->hasLinkModel(obj_msg->link_name))
+  {
+    RCLCPP_ERROR(ROBOT_LOGGER, "Unable to attach a body to link '%s' (link not found)", obj_msg->link_name.c_str());
+    return;
+  }
+
+  if (obj_msg->object.id == "<octomap>")
+  {
+    RCLCPP_ERROR(ROBOT_LOGGER, "The ID '%s' cannot be used for collision objects (name reserved)", "<octomap>");
+    return;
+  }
+
+  if (!state)  // there must be a parent in this case
+  {
+    RCLCPP_ERROR(ROBOT_LOGGER, "No robot state");
+    return;
+  }
+  const std::lock_guard<std::shared_mutex> data_lock(state_data_mutex_);
+  state->update();
+
+  // The ADD/REMOVE operations follow this order:
+  // STEP 1: Get info about the object from either the message or the world/RobotState
+  // STEP 2: Remove the object from the world/RobotState if necessary
+  // STEP 3: Put the object in the RobotState/world
+
+  if (obj_msg->object.operation == moveit_msgs::msg::CollisionObject::ADD ||
+      obj_msg->object.operation == moveit_msgs::msg::CollisionObject::APPEND)
+  {
+    const moveit::core::LinkModel* link_model = model->getLinkModel(obj_msg->link_name);
+    if (link_model)
+    {
+      // items to build the attached object from (filled from existing world object or message)
+      Eigen::Isometry3d object_pose_in_link;
+      std::vector<shapes::ShapeConstPtr> shapes;
+      EigenSTL::vector_Isometry3d shape_poses;
+      moveit::core::FixedTransformsMap subframe_poses;
+
+      // STEP 1: Obtain info about object to be attached.
+      //         If it is in the world, message contents are ignored.
+
+
+      Eigen::Isometry3d header_frame_to_object_pose;
+      if (!shapesAndPosesFromCollisionObjectMessage(obj_msg->object, header_frame_to_object_pose, shapes, shape_poses))
+        return;
+      const Eigen::Isometry3d world_to_header_frame = getFrameTransform(obj_msg->object.header.frame_id);
+      const Eigen::Isometry3d link_to_header_frame =
+          state->getGlobalLinkTransform(link_model).inverse() * world_to_header_frame;
+      object_pose_in_link = link_to_header_frame * header_frame_to_object_pose;
+
+      Eigen::Isometry3d subframe_pose;
+      for (std::size_t i = 0; i < obj_msg->object.subframe_poses.size(); ++i)
+      {
+        poseMsgToEigen(obj_msg->object.subframe_poses[i], subframe_pose);
+        std::string name = obj_msg->object.subframe_names[i];
+        subframe_poses[name] = subframe_pose;
+      }
+
+
+      if (shapes.empty())
+      {
+        RCLCPP_ERROR(ROBOT_LOGGER, "There is no geometry to attach to link '%s' as part of attached body '%s'",
+                     obj_msg->link_name.c_str(), obj_msg->object.id.c_str());
+        return;
+      }
+
+      // STEP 3: Attach the object to the robot
+      if (obj_msg->object.operation == moveit_msgs::msg::CollisionObject::ADD ||
+          !state->hasAttachedBody(obj_msg->object.id))
+      {
+        if (state->clearAttachedBody(obj_msg->object.id))
+        {
+          RCLCPP_INFO(ROBOT_LOGGER,
+                       "The robot state already had an object named '%s' attached to link '%s'. "
+                       "The object was replaced.",
+                       obj_msg->object.id.c_str(), obj_msg->link_name.c_str());
+        }
+        state->attachBody(obj_msg->object.id, object_pose_in_link, shapes, shape_poses, obj_msg->touch_links,
+                                 obj_msg->link_name, obj_msg->detach_posture, subframe_poses);
+        
+        if (obj_msg->object.meshes.size() > 0)
+        {
+          mr_msgs::msg::Poses p;
+          attached_mesh_obj_idx.insert(std::pair<std::string, size_t>(
+            obj_msg->object.id, obstacles.meshes.size()));
+          obstacles.meshes.push_back(obj_msg->object.meshes[0]);
+          obstacles.meshes_poses.emplace_back(std::move(p));
+          if (obj_msg->object.meshes.size() > 1){
+            RCLCPP_WARN(ROBOT_LOGGER, "Only support one shape in one attached object msg, the rest are ignored.");
+          }
+        }
+        if (obj_msg->object.primitives.size() > 0)
+        {
+          mr_msgs::msg::Poses p;
+          attached_prim_obj_idx.insert(std::pair<std::string, size_t>(
+            obj_msg->object.id, obstacles.primitives.size()));
+          obstacles.primitives.push_back(obj_msg->object.primitives[0]);
+          obstacles.primitives_poses.emplace_back(std::move(p));
+          if (obj_msg->object.primitives.size() > 1){
+            RCLCPP_WARN(ROBOT_LOGGER, "Only support one shape in one attached object msg, the rest are ignored.");
+          }
+        }
+        if (obj_msg->object.planes.size())
+        {
+          RCLCPP_WARN(ROBOT_LOGGER, "Planes object not supported.");
+        }
+        RCLCPP_INFO(ROBOT_LOGGER, "Attached object '%s' to link '%s'", obj_msg->object.id.c_str(), obj_msg->link_name.c_str());
+      }
+      else  // APPEND: augment to existing attached object
+      {
+        const moveit::core::AttachedBody* ab = state->getAttachedBody(obj_msg->object.id);
+        RCLCPP_WARN(ROBOT_LOGGER, "Append not supported.");
+        // Allow overriding the body's pose if provided, otherwise keep the old one
+        if (isEmpty(obj_msg->object.pose))
+          object_pose_in_link = ab->getPose();  // Keep old pose
+
+        shapes.insert(shapes.end(), ab->getShapes().begin(), ab->getShapes().end());
+        shape_poses.insert(shape_poses.end(), ab->getShapePoses().begin(), ab->getShapePoses().end());
+        subframe_poses.insert(ab->getSubframes().begin(), ab->getSubframes().end());
+        trajectory_msgs::msg::JointTrajectory detach_posture =
+            obj_msg->detach_posture.joint_names.empty() ? ab->getDetachPosture() : obj_msg->detach_posture;
+
+        std::set<std::string> touch_links = ab->getTouchLinks();
+        touch_links.insert(std::make_move_iterator(obj_msg->touch_links.begin()),
+                           std::make_move_iterator(obj_msg->touch_links.end()));
+
+        state->clearAttachedBody(obj_msg->object.id);
+        state->attachBody(obj_msg->object.id, object_pose_in_link, shapes, shape_poses, touch_links,
+                                 obj_msg->link_name, detach_posture, subframe_poses);
+        RCLCPP_INFO(ROBOT_LOGGER, "Appended things to object '%s' attached to link '%s'", obj_msg->object.id.c_str(),
+                     obj_msg->link_name.c_str());
+      }
+      return;
+    }
+    else
+    {
+      RCLCPP_ERROR(ROBOT_LOGGER, "Robot state is not compatible with robot model. This could be fatal.");
+    }
+  }
+  else if (obj_msg->object.operation == moveit_msgs::msg::CollisionObject::REMOVE)  // == DETACH
+  {
+    // STEP 1: Get info about the object from the RobotState
+    std::vector<const moveit::core::AttachedBody*> attached_bodies;
+    if (obj_msg->object.id.empty())
+    {
+      const moveit::core::LinkModel* link_model =
+          obj_msg->link_name.empty() ? nullptr : model->getLinkModel(obj_msg->link_name);
+      if (link_model)
+      {  // if we have a link model specified, only fetch bodies attached to this link
+        state->getAttachedBodies(attached_bodies, link_model);
+      }
+      else
+      {
+        state->getAttachedBodies(attached_bodies);
+      }
+    }
+    else  // A specific object id will be removed.
+    {
+      const moveit::core::AttachedBody* body = state->getAttachedBody(obj_msg->object.id);
+      if (body)
+      {
+        if (!obj_msg->link_name.empty() && (body->getAttachedLinkName() != obj_msg->link_name))
+        {
+          RCLCPP_ERROR_STREAM(ROBOT_LOGGER, "The AttachedCollisionObject message states the object is attached to "
+                                          << obj_msg->link_name << ", but it is actually attached to "
+                                          << body->getAttachedLinkName()
+                                          << ". Leave the link_name empty or specify the correct link.");
+          return;
+        }
+        attached_bodies.push_back(body);
+      }
+    }
+
+    // STEP 2+3: Remove the attached object(s) from the RobotState and put them in the world
+    for (const moveit::core::AttachedBody* attached_body : attached_bodies)
+    {
+      const std::string& name = attached_body->getName();
+      if (attached_mesh_obj_idx.find(name) != attached_mesh_obj_idx.end()){
+        const size_t idx = attached_mesh_obj_idx.at(name);
+        attached_mesh_obj_idx.erase(name);
+        obstacles.meshes.erase(obstacles.meshes.begin() + idx);
+        obstacles.meshes_poses.erase(obstacles.meshes_poses.begin() + idx);
+        for (auto& it : attached_mesh_obj_idx){
+          if (it.second > idx){
+            it.second -= 1;
+          }
+        }
+      } else if (attached_prim_obj_idx.find(name) != attached_prim_obj_idx.end()){
+        const size_t idx = attached_prim_obj_idx.at(name);
+        attached_prim_obj_idx.erase(name);
+        obstacles.primitives.erase(obstacles.primitives.begin() + idx);
+        obstacles.primitives_poses.erase(obstacles.primitives_poses.begin() + idx);
+        for (auto& it : attached_prim_obj_idx){
+          if (it.second > idx){
+            it.second -= 1;
+          }
+        }
+      }
+      state->clearAttachedBody(name);
+    }
+    if (!attached_bodies.empty() || obj_msg->object.id.empty())
+      return;
+  }
+  else if (obj_msg->object.operation == moveit_msgs::msg::CollisionObject::MOVE)
+  {
+    RCLCPP_ERROR(ROBOT_LOGGER, "Move for attached objects not yet implemented");
+  }
+  else
+  {
+    RCLCPP_ERROR(ROBOT_LOGGER, "Unknown collision object operation: %d", obj_msg->object.operation);
+  }
+
+  return;
+}
+
+bool SceneBuffer::Robot::shapesAndPosesFromCollisionObjectMessage(const moveit_msgs::msg::CollisionObject& object,
+                                                                  Eigen::Isometry3d& object_pose,
+                                                                  std::vector<shapes::ShapeConstPtr>& shapes,
+                                                                  EigenSTL::vector_Isometry3d& shape_poses)
+{
+  if (object.primitives.size() < object.primitive_poses.size())
+  {
+    RCLCPP_ERROR(ROBOT_LOGGER, "More primitive shape poses than shapes in collision object message.");
+    return false;
+  }
+  if (object.meshes.size() < object.mesh_poses.size())
+  {
+    RCLCPP_ERROR(ROBOT_LOGGER, "More mesh poses than meshes in collision object message.");
+    return false;
+  }
+  if (object.planes.size() < object.plane_poses.size())
+  {
+    RCLCPP_ERROR(ROBOT_LOGGER, "More plane poses than planes in collision object message.");
+    return false;
+  }
+
+  const int num_shapes = object.primitives.size() + object.meshes.size() + object.planes.size();
+  shapes.reserve(num_shapes);
+  shape_poses.reserve(num_shapes);
+
+  poseMsgToEigen(object.pose, object_pose);
+
+  bool switch_object_pose_and_shape_pose = false;
+  if (num_shapes == 1)
+  {
+    if (isEmpty(object.pose))
+    {
+      switch_object_pose_and_shape_pose = true;  // If the object pose is not set but the shape pose is,
+                                                 // use the shape's pose as the object pose.
+    }
+  }
+
+  auto append = [this, &object_pose, &shapes, &shape_poses,
+                 &switch_object_pose_and_shape_pose](shapes::Shape* s, const geometry_msgs::msg::Pose& pose_msg) {
+    if (!s)
+      return;
+    Eigen::Isometry3d pose;
+    poseMsgToEigen(pose_msg, pose);
+    if (!switch_object_pose_and_shape_pose)
+    {
+      shape_poses.emplace_back(std::move(pose));
+    }
+    else
+    {
+      shape_poses.emplace_back(std::move(object_pose));
+      object_pose = pose;
+    }
+    shapes.emplace_back(shapes::ShapeConstPtr(s));
+  };
+
+  auto treat_shape_vectors = [this, &append](const auto& shape_vector,        // the shape_msgs of each type
+                                       const auto& shape_poses_vector,  // std::vector<const geometry_msgs::Pose>
+                                       const std::string& shape_type) {
+    if (shape_vector.size() > shape_poses_vector.size())
+    {
+      RCLCPP_DEBUG_STREAM(ROBOT_LOGGER, "Number of " << shape_type
+                                               << " does not match number of poses "
+                                                  "in collision object message. Assuming identity.");
+      for (std::size_t i = 0; i < shape_vector.size(); ++i)
+      {
+        if (i >= shape_poses_vector.size())
+        {
+          append(shapes::constructShapeFromMsg(shape_vector[i]),
+                 geometry_msgs::msg::Pose());  // Empty shape pose => Identity
+        }
+        else
+          append(shapes::constructShapeFromMsg(shape_vector[i]), shape_poses_vector[i]);
+      }
+    }
+    else
+    {
+      for (std::size_t i = 0; i < shape_vector.size(); ++i)
+        append(shapes::constructShapeFromMsg(shape_vector[i]), shape_poses_vector[i]);
+    }
+  };
+
+  treat_shape_vectors(object.primitives, object.primitive_poses, std::string("primitive_poses"));
+  treat_shape_vectors(object.meshes, object.mesh_poses, std::string("meshes"));
+  treat_shape_vectors(object.planes, object.plane_poses, std::string("planes"));
+  return true;
+}
+
+void SceneBuffer::Robot::poseMsgToEigen(const geometry_msgs::msg::Pose& msg, Eigen::Isometry3d& out)
+{
+  Eigen::Translation3d translation(msg.position.x, msg.position.y, msg.position.z);
+  Eigen::Quaterniond quaternion(msg.orientation.w, msg.orientation.x, msg.orientation.y, msg.orientation.z);
+  quaternion.normalize();
+  out = translation * quaternion;
+}
+
+const Eigen::Isometry3d& SceneBuffer::Robot::getFrameTransform(const std::string& frame_id) const
+{
+  if (!frame_id.empty() && frame_id[0] == '/')
+  {
+    // Recursively call itself without the slash in front of frame name
+    return getFrameTransform(frame_id.substr(1));
+  }
+
+  bool frame_found;
+  const Eigen::Isometry3d& t1 = state->getFrameTransform(frame_id, &frame_found);
+  if (frame_found)
+    return t1;
+  else
+    RCLCPP_ERROR(ROBOT_LOGGER, "Frame not found when trying to get frame transfrom.");
+  const Eigen::Isometry3d& identity = Eigen::Isometry3d::Identity();
+  return identity;
 }
 
 bool SceneBuffer::set_trajectory_cb(

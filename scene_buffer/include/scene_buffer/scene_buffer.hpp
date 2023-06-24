@@ -10,6 +10,8 @@
 #include <visualization_msgs/msg/marker_array.hpp>
 #include <trajectory_msgs/msg/joint_trajectory.hpp>
 #include <sensor_msgs/msg/joint_state.h>
+#include <moveit_msgs/msg/collision_object.hpp>
+#include <moveit_msgs/msg/attached_collision_object.hpp>
 #include <memory>
 
 #include "mr_msgs/msg/obstacles.hpp"
@@ -47,6 +49,11 @@ public:
           jnt_pos_ = msg->position;
         }
       );
+      attached_collision_object_subscriber_ = node_->create_subscription<moveit_msgs::msg::AttachedCollisionObject>(
+        robot_name + "/attached_collision_object", 1024, [this](const moveit_msgs::msg::AttachedCollisionObject::ConstSharedPtr& obj){
+          return attachObjectCallback(obj);
+        }
+      );
     }
 
     void update_to_current()
@@ -68,13 +75,29 @@ public:
       }
     }
 
+    std::shared_mutex& get_state_data_mutex(){
+      return state_data_mutex_;
+    }
+
     std::shared_mutex& get_trajectory_data_mutex(){
       return trajectory_data_mutex_;
+    }
+
+    bool isEmpty(const geometry_msgs::msg::Quaternion& msg)
+    {
+      return msg.x == 0.0 && msg.y == 0.0 && msg.z == 0.0 && msg.w == 1.0;
+    }
+
+    bool isEmpty(const geometry_msgs::msg::Pose& msg)
+    {
+      return msg.position.x == 0.0 && msg.position.y == 0.0 && msg.position.z == 0.0 && isEmpty(msg.orientation);
     }
 
     moveit::core::RobotModelPtr model;
     moveit::core::RobotStatePtr state;
     mr_msgs::msg::Obstacles obstacles;
+    std::map<std::string, size_t> attached_mesh_obj_idx;
+    std::map<std::string, size_t> attached_prim_obj_idx;
     std::vector<moveit::core::LinkModel*> mesh_links;
     std::vector<moveit::core::LinkModel*> prim_links;
     std::vector<std::shared_ptr<TrajectoryMsg>> trajectories;
@@ -85,6 +108,12 @@ public:
     void load_robot(const std::string& robot_name);
     void load_robot(const std::string& urdf, const std::string& srdf);
     bool obstacles_from_links();
+    void attachObjectCallback(const moveit_msgs::msg::AttachedCollisionObject::ConstSharedPtr& obj);
+    bool shapesAndPosesFromCollisionObjectMessage(const moveit_msgs::msg::CollisionObject& object,
+      Eigen::Isometry3d& object_pose, std::vector<shapes::ShapeConstPtr>& shapes, EigenSTL::vector_Isometry3d& shape_poses);
+    void poseMsgToEigen(const geometry_msgs::msg::Pose& msg, Eigen::Isometry3d& out);
+    const Eigen::Isometry3d& getFrameTransform(const std::string& frame_id) const;
+
 
     std::shared_ptr<rclcpp::Node> node_;
     std::string robot_name_;
@@ -93,9 +122,11 @@ public:
     std::vector<double> jnt_pos_;
     std::vector<std::string> jnt_names_;
     std::shared_mutex jnt_data_mutex_;
+    std::shared_mutex state_data_mutex_;
     std::shared_mutex trajectory_data_mutex_;
     rclcpp::AsyncParametersClient::SharedPtr param_client_;
     rclcpp::Subscription<sensor_msgs::msg::JointState>::SharedPtr jnt_states_sub_;
+    rclcpp::Subscription<moveit_msgs::msg::AttachedCollisionObject>::SharedPtr attached_collision_object_subscriber_;
     rclcpp::Publisher<MarkerArray>::SharedPtr obstacles_publisher_;
   };
 

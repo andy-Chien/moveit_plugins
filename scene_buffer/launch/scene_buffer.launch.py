@@ -54,7 +54,7 @@ def launch_setup(context, *args, **kwargs):
         executable="scene_buffer_node",
         namespace=namespace,
         parameters=[{"use_sim_time": use_sim_time}, config],
-        # prefix=['xterm -e gdb -ex run --args'],
+        prefix=['xterm -e gdb -ex run --args'],
         output="screen",
     )
 
