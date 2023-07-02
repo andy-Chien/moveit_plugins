@@ -28,7 +28,7 @@ public:
   using MarkerArray = visualization_msgs::msg::MarkerArray;
 
   SceneBuffer(const std::string& node_name, const rclcpp::NodeOptions& node_options);
-  void init();
+  bool init();
 
   class Robot
   {

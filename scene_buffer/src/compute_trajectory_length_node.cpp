@@ -16,18 +16,21 @@ public:
     {
 
     }
-    void init()
+    bool init()
     {
         param_listener_ = std::make_shared<ParamListener>(shared_from_this());
         params_ = param_listener_->get_params();
 
         for(const auto& robot_name : params_.robot_names)
         {
+            if(robot_name == "empty")
+                return false;
             auto robot = std::make_shared<Robot>(shared_from_this(), robot_name);
             robots_.insert(std::pair<std::string, std::shared_ptr<Robot>>(
             robot_name, robot)
             );
         }
+        return true;
     }
 
     class Robot
@@ -171,7 +174,10 @@ int main(int argc, char** argv)
     node_options.automatically_declare_parameters_from_overrides(true);
     auto compute_traj_length_node = std::make_shared<
         ComputeTrajLength>("compute_traj_length", node_options);
-    compute_traj_length_node->init();
+    if(!compute_traj_length_node->init()){
+        rclcpp::shutdown();
+        return 0;
+    }
 
     rclcpp::executors::MultiThreadedExecutor executor;
     executor.add_node(compute_traj_length_node);

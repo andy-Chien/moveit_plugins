@@ -1,0 +1,22 @@
+scene_buffer:
+  ros__parameters:
+    robot_names:
+      - robot_2
+    
+    padding: 0.05
+    delay_duration: 0.2
+    pub_obstacles: true
+    obstacle_pub_step: 3
+
+    pos_diff_min: 0.02
+    pos_diff_max: 0.05
+    rot_diff_min: 0.002
+    rot_diff_max: 0.005
+
+    collision_maps:
+      robot_2:
+        collision_robots: [empty]
+
+compute_traj_length:
+  ros__parameters:
+    robot_names: [empty]

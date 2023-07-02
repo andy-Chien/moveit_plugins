@@ -22,7 +22,7 @@ SceneBuffer::SceneBuffer(const std::string& node_name, const rclcpp::NodeOptions
     "/visualization_marker_array", 1);
 }
 
-void SceneBuffer::init()
+bool SceneBuffer::init()
 {
   // Create the parameter listener and get the parameters
   param_listener_ = std::make_shared<ParamListener>(shared_from_this());
@@ -36,6 +36,7 @@ void SceneBuffer::init()
       robot_name, robot)
     );
   }
+  return true;
 }
 
 void SceneBuffer::Robot::load_robot(const std::string& robot_name)
@@ -409,7 +410,8 @@ bool SceneBuffer::get_obstacle_cb(
 
   for(const auto& other_name : collision_robots)
   {
-
+    if(other_name=="empty")
+      continue;
     const auto& other_robot = robots_.at(other_name);
     other_robot->clean_poses();
     const std::lock_guard<std::shared_mutex> state_lock(other_robot->get_state_data_mutex());
@@ -436,6 +438,8 @@ bool SceneBuffer::get_obstacle_cb(
   }
   if(params_.pub_obstacles){
     for(const auto& other_name : collision_robots){
+      if(other_name=="empty")
+        continue;
       pub_obstacles(*robots_.at(other_name), params_.obstacle_pub_step);
     }
   }
