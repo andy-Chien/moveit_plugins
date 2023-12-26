@@ -860,9 +860,10 @@ const Eigen::Isometry3d& SceneBuffer::Robot::getFrameTransform(const std::string
   if (frame_found)
     return t1;
   else
+  {
     RCLCPP_ERROR(ROBOT_LOGGER, "Frame not found when trying to get frame transfrom.");
-  const Eigen::Isometry3d& identity = Eigen::Isometry3d::Identity();
-  return identity;
+    throw;
+  }
 }
 
 bool SceneBuffer::set_trajectory_cb(
