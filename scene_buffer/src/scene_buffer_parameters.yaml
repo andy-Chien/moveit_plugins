@@ -68,14 +68,6 @@ scene_buffer:
       gt_eq<>: [ 0.0 ]
     }
   }
-  delay_duration: {
-    type: double,
-    default_value: 0.1,
-    description: "delay the timing to ignore the trajectory point",
-    validation: {
-      gt_eq<>: [ 0.0 ]
-    }
-  }
   collision_maps:
     __map_robot_names: 
       collision_robots: {

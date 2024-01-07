@@ -60,22 +60,13 @@ void SceneBuffer::Robot::load_robot(const std::string& robot_name)
 
 void SceneBuffer::Robot::load_robot(const std::string& urdf, const std::string& srdf)
 {
-  std::cout<<urdf<<std::endl;
-  std::cout<<"XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX"<<std::endl;
-  std::cout<<srdf<<std::endl;
-
-  // std::vector<Eigen::Isometry3d> link_poses;
-  // std::vector<std::vector<Eigen::Isometry3d>> link_poses_;
-
   robot_model_loader::RobotModelLoader rml(
     node_, robot_model_loader::RobotModelLoader::Options(urdf, srdf));
   model = rml.getModel();
   state = std::make_shared<moveit::core::RobotState>(model);
 
   state->setToDefaultValues();
-  std::cout<<"ccccccccccccccccccccccccccccccccccccccccccccccccccc"<<std::endl;
   model->printModelInfo(std::cout);
-  std::cout<<"ddddddddddddddddddddddddddddddddddddddddddddddddddd"<<std::endl;
   state->printTransforms();
 
   for(const auto& link : model->getLinkModels())
@@ -98,7 +89,7 @@ void SceneBuffer::Robot::load_robot(const std::string& urdf, const std::string& 
       prim_links.push_back(link);
     }
   }
-  obstacles.header.frame_id = "world";
+  obstacles.header.frame_id = model->getModelFrame();
   obstacles.meshes.reserve(mesh_links.size() + 10); // 10 for attached objects
   obstacles.primitives.reserve(prim_links.size() + 10);
   obstacles.meshes_poses.reserve(mesh_links.size() + 10);
@@ -138,7 +129,7 @@ void SceneBuffer::pub_obstacles(const Robot& robot, const uint8_t step) const
       const auto& pose = obs.meshes_poses[i].poses[id];
       visualization_msgs::msg::Marker marker;
       marker.header.stamp = time_now;
-      marker.header.frame_id = "world";
+      marker.header.frame_id = obs.header.frame_id;
       marker.ns = link_name;
       marker.id = id;
       marker.type = visualization_msgs::msg::Marker::MESH_RESOURCE;
@@ -176,7 +167,7 @@ void SceneBuffer::pub_obstacles(const Robot& robot, const uint8_t step) const
       const auto& pose = obs.meshes_poses[i].poses[id];
       visualization_msgs::msg::Marker marker;
       marker.header.stamp = time_now;
-      marker.header.frame_id = "world";
+      marker.header.frame_id = obs.header.frame_id;
       marker.ns = "attached";
       marker.id = id;
       marker.type = visualization_msgs::msg::Marker::TRIANGLE_LIST;
